@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: kebunsu-api
+    restart: always
+    ports:
+      - "8000:8000"
+    # CHOOSE ONE OF THE FOLLOWING NETWORK CONFIGURATIONS:
+    
+    # Option 1: For Linux hosts (uncomment this line)
+    # network_mode: "host"
+    
+    # Option 2: For Windows/macOS with Docker Desktop (default)
+    # This uses the default bridge network which allows outbound connections
+    networks:
+      - kebunsu-network
+      
+    # For Windows users with Docker Desktop connecting to a database on localhost:
+    # Use extra_hosts to map host.docker.internal to the host IP
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - PROJECT_NAME=${PROJECT_NAME:-XerpeX ERP System}
+      - API_V1_STR=${API_V1_STR:-/api/v1}
+      - SECRET_KEY=${SECRET_KEY:-supersecretkey}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-11520}
+      # Replace these default values with your actual database details in .env file
+      # For Windows users with Docker Desktop connecting to a database on localhost:
+      # Use host.docker.internal instead of localhost
+      - MYSQL_SERVER=${MYSQL_SERVER:-host.docker.internal}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-root}
+      - MYSQL_DB=${MYSQL_DB:-kebunsu_erp}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["http://localhost:3000","http://localhost:8000"]}
+    volumes:
+      - ./:/app
+    command: >
+      bash -c "alembic upgrade head &&
+              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  # MySQL service
+  mysql:
+    image: mysql:8.0
+    container_name: kebunsu-mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    networks:
+      - kebunsu-network
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-root}
+      - MYSQL_DATABASE=${MYSQL_DB:-kebunsu_erp}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-root}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+
+# Define networks
+networks:
+  kebunsu-network:
+    driver: bridge
+
+# Define volumes
+volumes:
+  mysql-data:
