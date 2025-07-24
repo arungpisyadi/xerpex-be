@@ -29,4 +29,7 @@ httpx>=0.24.0
 python-dateutil>=2.8.2
 
 # Error monitoring
-sentry-sdk>=1.30.0pydantic-settings==2.10.1
+sentry-sdk>=1.30.0
+
+# Pydantic extensions
+pydantic-settings>=2.0.0

@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
-from app.models.payment import Payment, PaymentInvoice, PaymentInvoiceItem
+from app.models.payment import Payment, Invoice, InvoiceItem
 from app.schemas.payment import (
     PaymentCreate, PaymentUpdate, PaymentStatusUpdate,
     PaymentInvoiceCreate, PaymentInvoiceUpdate
@@ -230,7 +230,7 @@ def delete_payment(db: Session, payment_id: int) -> bool:
 
 
 @sentry_monitored_service
-def get_invoice(db: Session, invoice_id: int) -> Optional[PaymentInvoice]:
+def get_invoice(db: Session, invoice_id: int) -> Optional[Invoice]:
     """
     Get an invoice by ID
     
@@ -245,7 +245,7 @@ def get_invoice(db: Session, invoice_id: int) -> Optional[PaymentInvoice]:
 
 
 @sentry_monitored_service
-def get_invoice_by_number(db: Session, invoice_number: str) -> Optional[PaymentInvoice]:
+def get_invoice_by_number(db: Session, invoice_number: str) -> Optional[Invoice]:
     """
     Get an invoice by number
     
@@ -269,7 +269,7 @@ def get_invoices(
     guest_name: Optional[str] = None,
     from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None
-) -> List[PaymentInvoice]:
+) -> List[Invoice]:
     """
     Get invoices with optional filtering
     
@@ -284,30 +284,30 @@ def get_invoices(
         to_date: Filter by due date to
         
     Returns:
-        List[PaymentInvoice]: List of invoices
+        List[Invoice]: List of invoices
     """
-    query = db.query(PaymentInvoice)
+    query = db.query(Invoice)
     
     if booking_id:
-        query = query.filter(PaymentInvoice.booking_id == booking_id)
+        query = query.filter(Invoice.booking_id == booking_id)
     
     if status:
-        query = query.filter(PaymentInvoice.status == status)
+        query = query.filter(Invoice.status == status)
     
     if guest_name:
-        query = query.filter(PaymentInvoice.guest_name.ilike(f"%{guest_name}%"))
+        query = query.filter(Invoice.guest_name.ilike(f"%{guest_name}%"))
     
     if from_date:
-        query = query.filter(PaymentInvoice.due_date >= from_date)
+        query = query.filter(Invoice.due_date >= from_date)
     
     if to_date:
-        query = query.filter(PaymentInvoice.due_date <= to_date)
+        query = query.filter(Invoice.due_date <= to_date)
     
-    return query.order_by(PaymentInvoice.created_at.desc()).offset(skip).limit(limit).all()
+    return query.order_by(Invoice.created_at.desc()).offset(skip).limit(limit).all()
 
 
 @sentry_monitored_service
-def create_invoice(db: Session, invoice: PaymentInvoiceCreate, current_user_id: int) -> PaymentInvoice:
+def create_invoice(db: Session, invoice: PaymentInvoiceCreate, current_user_id: int) -> Invoice:
     """
     Create a new invoice
     
@@ -317,7 +317,7 @@ def create_invoice(db: Session, invoice: PaymentInvoiceCreate, current_user_id: 
         current_user_id: Current user ID
         
     Returns:
-        PaymentInvoice: Created invoice
+        Invoice: Created invoice
         
     Raises:
         HTTPException: If booking not found or items are invalid
@@ -349,7 +349,7 @@ def create_invoice(db: Session, invoice: PaymentInvoiceCreate, current_user_id: 
     
     # Create invoice
     invoice_number = generate_invoice_number()
-    db_invoice = PaymentInvoice(
+    db_invoice = Invoice(
         invoice_number=invoice_number,
         booking_id=invoice.booking_id,
         guest_name=invoice.guest_name,
@@ -370,7 +370,7 @@ def create_invoice(db: Session, invoice: PaymentInvoiceCreate, current_user_id: 
     
     # Add invoice items
     for item in invoice.items:
-        db_item = PaymentInvoiceItem(
+        db_item = InvoiceItem(
             invoice_id=db_invoice.id,
             description=item.get('description', ''),
             price=Decimal(str(item['price'])),
@@ -386,7 +386,7 @@ def create_invoice(db: Session, invoice: PaymentInvoiceCreate, current_user_id: 
 
 
 @sentry_monitored_service
-def update_invoice(db: Session, invoice_id: int, invoice_update: PaymentInvoiceUpdate) -> PaymentInvoice:
+def update_invoice(db: Session, invoice_id: int, invoice_update: PaymentInvoiceUpdate) -> Invoice:
     """
     Update an invoice
     
@@ -396,7 +396,7 @@ def update_invoice(db: Session, invoice_id: int, invoice_update: PaymentInvoiceU
         invoice_update: Invoice update data
         
     Returns:
-        PaymentInvoice: Updated invoice
+        Invoice: Updated invoice
         
     Raises:
         HTTPException: If invoice not found or items are invalid
@@ -437,11 +437,11 @@ def update_invoice(db: Session, invoice_id: int, invoice_update: PaymentInvoiceU
             total_amount += Decimal(str(item['price'])) * Decimal(str(item['quantity']))
         
         # Delete existing items
-        db.query(PaymentInvoiceItem).filter(PaymentInvoiceItem.invoice_id == invoice_id).delete()
+        db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).delete()
         
         # Add new items
         for item in items:
-            db_item = PaymentInvoiceItem(
+            db_item = InvoiceItem(
                 invoice_id=db_invoice.id,
                 description=item.get('description', ''),
                 price=Decimal(str(item['price'])),
@@ -461,7 +461,7 @@ def update_invoice(db: Session, invoice_id: int, invoice_update: PaymentInvoiceU
 
 
 @sentry_monitored_service
-def update_invoice_status(db: Session, invoice_id: int, status: str) -> PaymentInvoice:
+def update_invoice_status(db: Session, invoice_id: int, status: str) -> Invoice:
     """
     Update an invoice status
     
@@ -471,7 +471,7 @@ def update_invoice_status(db: Session, invoice_id: int, status: str) -> PaymentI
         status: New status
         
     Returns:
-        PaymentInvoice: Updated invoice
+        Invoice: Updated invoice
         
     Raises:
         HTTPException: If invoice not found or invalid status
@@ -522,7 +522,7 @@ def delete_invoice(db: Session, invoice_id: int) -> bool:
         )
     
     # Delete invoice items
-    db.query(PaymentInvoiceItem).filter(PaymentInvoiceItem.invoice_id == invoice_id).delete()
+    db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).delete()
     
     # Delete invoice
     db.delete(db_invoice)
@@ -640,9 +640,9 @@ def get_booking_payment_summary(db: Session, booking_id: int) -> Dict[str, Any]:
         )
     
     # Get total invoiced amount
-    total_invoiced = db.query(func.sum(PaymentInvoice.total_amount)).filter(
-        PaymentInvoice.booking_id == booking_id,
-        PaymentInvoice.status != "cancelled"
+    total_invoiced = db.query(func.sum(Invoice.total_amount)).filter(
+        Invoice.booking_id == booking_id,
+        Invoice.status != "cancelled"
     ).scalar() or Decimal('0.00')
     
     # Get total paid amount

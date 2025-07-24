@@ -40,3 +40,19 @@ class Invoice(Base):
     
     # Relationships
     booking = relationship("Booking", back_populates="invoices")
+    items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
+
+
+class InvoiceItem(Base):
+    """Invoice item model"""
+    __tablename__ = "invoice_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    description = Column(String(255), nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    subtotal = Column(Numeric(10, 2), nullable=False)
+    
+    # Relationships
+    invoice = relationship("Invoice", back_populates="items")

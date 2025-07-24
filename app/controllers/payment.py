@@ -8,10 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.payment import Payment, PaymentInvoice
+from app.models.payment import Payment, Invoice
 from app.schemas.payment import (
     PaymentCreate, PaymentUpdate, PaymentResponse, PaymentDetailResponse,
-    PaymentStatusUpdate, PaymentInvoiceCreate, PaymentInvoiceUpdate, PaymentInvoiceResponse
+    PaymentStatusUpdate, PaymentInvoiceCreate, PaymentInvoiceUpdate, InvoiceResponse
 )
 from app.services.payment import (
     get_payment, get_payments, create_payment, update_payment,
@@ -149,7 +149,7 @@ def link_payment_to_invoice_endpoint(
 
 
 # Invoice endpoints
-@router.post("/invoices", response_model=PaymentInvoiceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/invoices", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
 def create_invoice_endpoint(
     invoice: PaymentInvoiceCreate,
     db: Session = Depends(get_db),
@@ -161,7 +161,7 @@ def create_invoice_endpoint(
     return create_invoice(db, invoice, current_user.id)
 
 
-@router.get("/invoices", response_model=List[PaymentInvoiceResponse])
+@router.get("/invoices", response_model=List[InvoiceResponse])
 def read_invoices(
     skip: int = 0,
     limit: int = 100,
@@ -188,7 +188,7 @@ def read_invoices(
     )
 
 
-@router.get("/invoices/{invoice_id}", response_model=PaymentInvoiceResponse)
+@router.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
 def read_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
@@ -203,7 +203,7 @@ def read_invoice(
     return db_invoice
 
 
-@router.put("/invoices/{invoice_id}", response_model=PaymentInvoiceResponse)
+@router.put("/invoices/{invoice_id}", response_model=InvoiceResponse)
 def update_invoice_endpoint(
     invoice_id: int,
     invoice_update: PaymentInvoiceUpdate,
@@ -216,7 +216,7 @@ def update_invoice_endpoint(
     return update_invoice(db, invoice_id, invoice_update)
 
 
-@router.patch("/invoices/{invoice_id}/status", response_model=PaymentInvoiceResponse)
+@router.patch("/invoices/{invoice_id}/status", response_model=InvoiceResponse)
 def update_invoice_status_endpoint(
     invoice_id: int,
     status_update: PaymentStatusUpdate,

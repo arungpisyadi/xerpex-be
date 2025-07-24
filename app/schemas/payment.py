@@ -56,8 +56,8 @@ class PaymentInvoiceUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-class PaymentInvoiceResponse(BaseModel):
-    """Payment invoice response schema"""
+class InvoiceResponse(BaseModel):
+    """Invoice response schema"""
     id: int
     invoice_number: str
     booking_id: int
@@ -74,7 +74,7 @@ class PaymentInvoiceResponse(BaseModel):
 
     class Config:
         """Pydantic config"""
-        orm_mode = True
+        from_attributes = True
 
 
 class PaymentResponse(BaseModel):
@@ -93,16 +93,16 @@ class PaymentResponse(BaseModel):
 
     class Config:
         """Pydantic config"""
-        orm_mode = True
+        from_attributes = True
 
 
 class PaymentDetailResponse(BaseModel):
     """Payment detail response schema"""
     payment: PaymentResponse
-    invoice: Optional[PaymentInvoiceResponse] = None
+    invoice: Optional[InvoiceResponse] = None
     booking_code: str
     guest_name: str
 
     class Config:
         """Pydantic config"""
-        orm_mode = True
+        from_attributes = True

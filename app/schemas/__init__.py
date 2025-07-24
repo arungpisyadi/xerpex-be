@@ -20,7 +20,7 @@ from app.schemas.booking import (
 )
 from app.schemas.payment import (
     PaymentBase, PaymentCreate, PaymentUpdate, PaymentStatusUpdate,
-    PaymentInvoiceCreate, PaymentInvoiceUpdate, PaymentInvoiceResponse,
+    PaymentInvoiceCreate, PaymentInvoiceUpdate, InvoiceResponse,
     PaymentResponse, PaymentDetailResponse
 )
 from app.schemas.report import (

@@ -128,3 +128,28 @@ class BookingDetail(Booking):
     total_price: condecimal(max_digits=10, decimal_places=2)
     total_paid: condecimal(max_digits=10, decimal_places=2)
     balance: condecimal(max_digits=10, decimal_places=2)
+
+
+class BookingResponse(Booking):
+    """Booking response schema for API"""
+    pass
+
+
+class BookingDetailResponse(BookingDetail):
+    """Booking detail response schema for API"""
+    pass
+
+
+class BookingVillaResponse(BookingVilla):
+    """Booking villa response schema for API"""
+    pass
+
+
+class BookingPackageResponse(BookingPackage):
+    """Booking package response schema for API"""
+    pass
+
+
+class BookingAddonResponse(BookingAddon):
+    """Booking addon response schema for API"""
+    pass
