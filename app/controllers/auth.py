@@ -4,7 +4,6 @@ Authentication controllers for the XerpeX ERP System
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-import threading
 
 from app.database import get_db
 from app.models.user import User
@@ -89,27 +88,9 @@ async def login_json(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        # Log user login in a separate thread to avoid blocking
+        # Log user login
         client_host = request.client.host if request.client else None
-        
-        # Function to run in a separate thread
-        def log_login_async(user_id, client_ip):
-            try:
-                # Create a new database session for this thread
-                from app.database import SessionLocal
-                thread_db = SessionLocal()
-                log_user_login(thread_db, user_id, client_ip)
-                thread_db.close()
-            except Exception as e:
-                # Just log the error but don't fail the login
-                print(f"Error logging login: {str(e)}")
-        
-        # Start the logging in a separate thread
-        threading.Thread(
-            target=log_login_async,
-            args=(user.id, client_host),
-            daemon=True
-        ).start()
+        log_user_login(db, user.id, client_host)
         
         # Generate token
         return generate_token(user)
