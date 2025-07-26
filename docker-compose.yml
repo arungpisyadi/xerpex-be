@@ -6,7 +6,7 @@ services:
     container_name: kebunsu-api
     restart: always
     ports:
-      - "8001:8000"  # Changed host port from 8000 to 8001 to avoid conflicts
+      - "8000:8000"  # Use consistent port mapping
     # CHOOSE ONE OF THE FOLLOWING NETWORK CONFIGURATIONS:
 
     # Option 1: For Linux hosts (uncomment this line)
