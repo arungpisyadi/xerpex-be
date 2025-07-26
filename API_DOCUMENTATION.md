@@ -17,7 +17,7 @@ All API endpoints (except for login and register) require authentication using J
 #### Login
 
 ```
-POST /api/v1/auth/login
+POST /api/v1/auth/login/json
 ```
 
 Request body:
@@ -42,6 +42,13 @@ Response:
   }
 }
 ```
+
+> **Note:** The following endpoints are deprecated and will be removed in a future version:
+>
+> - `POST /api/v1/auth/login` (form-based)
+> - `POST /api/v1/auth/login-json` (JSON-based)
+>
+> Please use the `/api/v1/auth/login/json` endpoint for all new implementations.
 
 #### Register
 

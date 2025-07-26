@@ -2,8 +2,10 @@
 Configuration settings for the XerpeX ERP System
 """
 import os
-from typing import Optional
+import json
+from typing import Optional, List
 from pydantic import AnyUrl, Field
+from pydantic.functional_validators import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,7 +33,20 @@ class Settings(BaseSettings):
         return f"mysql+mysqldb://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_SERVER}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
     
     # CORS settings
-    BACKEND_CORS_ORIGINS: list[str] = ["*"]
+    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
+        """Parse CORS origins from string or list."""
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return ["*"]
+        return v
     
     # Sentry settings
     SENTRY_DSN: Optional[str] = None

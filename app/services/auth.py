@@ -16,19 +16,23 @@ from app.utils.sentry import sentry_monitored_service
 
 
 @sentry_monitored_service
-def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+def authenticate_user(db: Session, username_or_email: str, password: str) -> Optional[User]:
     """
-    Authenticate a user
+    Authenticate a user using either username or email
     
     Args:
         db: Database session
-        email: User email
+        username_or_email: User username or email
         password: User password
         
     Returns:
         User: Authenticated user or None
     """
-    user = db.query(User).filter(User.email == email).first()
+    # Try to find user by email first, then by username if not found
+    user = db.query(User).filter(
+        (User.email == username_or_email) | (User.username == username_or_email)
+    ).first()
+    
     if not user:
         return None
     if not verify_password(password, user.password_hash):
