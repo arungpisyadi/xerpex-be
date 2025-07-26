@@ -82,6 +82,11 @@ async def login_json(
         from sqlalchemy.sql import text
         from datetime import datetime, timedelta
         from app.utils.security import create_access_token
+        from sqlalchemy.exc import SQLAlchemyError
+        import logging
+        
+        # Set up logging
+        logger = logging.getLogger(__name__)
         
         # Simple query to find user by email
         query = text("""
@@ -91,8 +96,29 @@ async def login_json(
             LIMIT 1
         """)
         
-        # Execute with timeout
-        result = db.execute(query, {"email": user_login.email}).fetchone()
+        # Execute with explicit timeout
+        try:
+            # Set a statement timeout if using PostgreSQL or MySQL
+            try:
+                # PostgreSQL syntax
+                db.execute(text("SET statement_timeout = 5000"))  # 5 seconds
+            except:
+                try:
+                    # MySQL syntax
+                    db.execute(text("SET max_execution_time = 5000"))  # 5 seconds
+                except:
+                    # If both fail, continue without setting timeout
+                    pass
+                
+            # Execute the query
+            result = db.execute(query, {"email": user_login.email}).fetchone()
+        except SQLAlchemyError as e:
+            # Log the database error
+            logger.error(f"Database error during login: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database operation timed out",
+            )
         
         # Check if user exists
         if not result:
