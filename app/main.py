@@ -99,11 +99,44 @@ async def root():
     """Root endpoint"""
     return {"message": "Welcome to XerpeX ERP System API"}
 
-
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Basic health check endpoint"""
     return {"status": "healthy"}
+
+
+@app.get("/health/db")
+async def db_health_check():
+    """Database health check endpoint"""
+    from sqlalchemy import text
+    from app.database import get_db
+    
+    try:
+        # Get database session
+        db = next(get_db())
+        
+        # Execute simple query with timeout
+        result = db.execute(text("SELECT 1")).fetchone()
+        
+        if result and result[0] == 1:
+            return {
+                "status": "healthy",
+                "database": "connected",
+                "message": "Database connection successful"
+            }
+        else:
+            return {
+                "status": "unhealthy",
+                "database": "error",
+                "message": "Database returned unexpected result"
+            }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": "error",
+            "message": f"Database connection failed: {str(e)}"
+        }
+
 
 
 @app.exception_handler(HTTPException)
