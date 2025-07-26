@@ -7,10 +7,12 @@ echo "Starting database timeout diagnosis..."
 
 # Load environment variables if available
 if [ -f .env ]; then
-    source .env
+    # Parse .env file manually to avoid issues with variable names
+    export $(grep -v '^#' .env | xargs -d '\n')
     echo "Loaded environment variables from .env"
 elif [ -f .env.staging ]; then
-    source .env.staging
+    # Parse .env.staging file manually
+    export $(grep -v '^#' .env.staging | xargs -d '\n')
     echo "Loaded environment variables from .env.staging"
 else
     echo "No .env file found. Please enter database credentials manually:"
