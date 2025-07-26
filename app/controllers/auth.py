@@ -4,12 +4,14 @@ Authentication controllers for the XerpeX ERP System
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+import threading
 
 from app.database import get_db
 from app.models.user import User
 from app.schemas.auth import Token, UserCreate, UserResponse, UserLogin
 from app.services.auth import authenticate_user, create_user, log_user_login, generate_token
 from app.utils.security import get_current_active_user
+from app.utils.sentry import capture_exception, get_request_info
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -76,22 +78,52 @@ async def login_json(
     Raises:
         HTTPException: If authentication fails
     """
-    # UserLogin schema uses email field, which we pass to authenticate_user
-    # authenticate_user now accepts either username or email
-    user = authenticate_user(db, user_login.email, user_login.password)
-    if not user:
+    try:
+        # UserLogin schema uses email field, which we pass to authenticate_user
+        # authenticate_user now accepts either username or email
+        user = authenticate_user(db, user_login.email, user_login.password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Log user login in a separate thread to avoid blocking
+        client_host = request.client.host if request.client else None
+        
+        # Function to run in a separate thread
+        def log_login_async(user_id, client_ip):
+            try:
+                # Create a new database session for this thread
+                from app.database import SessionLocal
+                thread_db = SessionLocal()
+                log_user_login(thread_db, user_id, client_ip)
+                thread_db.close()
+            except Exception as e:
+                # Just log the error but don't fail the login
+                print(f"Error logging login: {str(e)}")
+        
+        # Start the logging in a separate thread
+        threading.Thread(
+            target=log_login_async,
+            args=(user.id, client_host),
+            daemon=True
+        ).start()
+        
+        # Generate token
+        return generate_token(user)
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Log the exception
+        capture_exception(e, context={"request": get_request_info(request)})
+        # Return a generic error
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login process failed: {str(e)}",
         )
-    
-    # Log user login
-    client_host = request.client.host if request.client else None
-    log_user_login(db, user.id, client_host)
-    
-    # Generate token
-    return generate_token(user)
 
 
 @router.post("/login-json", response_model=Token, deprecated=True)

@@ -3,6 +3,7 @@ Main application entry point for the XerpeX ERP System
 """
 import json
 import sentry_sdk
+from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -103,6 +104,15 @@ async def root():
 async def health_check():
     """Basic health check endpoint"""
     return {"status": "healthy"}
+
+@app.get("/test-connection")
+async def test_connection():
+    """Simple endpoint to test connectivity without database access"""
+    return {
+        "status": "connected",
+        "timestamp": str(datetime.now()),
+        "message": "Connection successful"
+    }
 
 
 @app.get("/health/db")

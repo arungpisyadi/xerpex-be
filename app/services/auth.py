@@ -3,6 +3,8 @@ Authentication services for the XerpeX ERP System
 """
 from datetime import datetime, timedelta
 from typing import Optional
+import time
+import functools
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -14,11 +16,14 @@ from app.schemas.auth import UserCreate
 from app.utils.security import verify_password, get_password_hash, create_access_token
 from app.utils.sentry import sentry_monitored_service
 
+# Simple cache for authentication results
+_auth_cache = {}
+
 
 @sentry_monitored_service
 def authenticate_user(db: Session, username_or_email: str, password: str) -> Optional[User]:
     """
-    Authenticate a user using either username or email
+    Authenticate a user using either username or email with caching
     
     Args:
         db: Database session
@@ -28,6 +33,14 @@ def authenticate_user(db: Session, username_or_email: str, password: str) -> Opt
     Returns:
         User: Authenticated user or None
     """
+    # Check cache first (with 5-minute expiration)
+    cache_key = f"{username_or_email}:{password}"
+    current_time = time.time()
+    if cache_key in _auth_cache:
+        cached_time, cached_user = _auth_cache[cache_key]
+        if current_time - cached_time < 300:  # 5 minutes
+            return cached_user
+    
     # Try to find user by email first, then by username if not found
     user = db.query(User).filter(
         (User.email == username_or_email) | (User.username == username_or_email)
@@ -37,6 +50,10 @@ def authenticate_user(db: Session, username_or_email: str, password: str) -> Opt
         return None
     if not verify_password(password, user.password_hash):
         return None
+    
+    # Cache the result
+    _auth_cache[cache_key] = (current_time, user)
+    
     return user
 
 

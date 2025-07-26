@@ -9,15 +9,19 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from app.config import settings
 
-# Create SQLAlchemy engine with timeout settings
+# Create SQLAlchemy engine with optimized timeout settings
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI,
     pool_pre_ping=True,
     echo=False,
     pool_recycle=3600,  # Recycle connections after 1 hour
-    pool_timeout=30,    # Wait max 30 seconds for a connection from the pool
+    pool_timeout=120,   # Increased from 30 seconds to 120 seconds
+    pool_size=10,       # Explicitly set pool size
+    max_overflow=20,    # Allow up to 20 connections beyond pool_size
     connect_args={
-        "connect_timeout": 10  # Wait max 10 seconds for initial connection
+        "connect_timeout": 60,  # Increased from 10 seconds to 60 seconds
+        "read_timeout": 300,    # Add read timeout of 5 minutes
+        "write_timeout": 300    # Add write timeout of 5 minutes
     }
 )
 
