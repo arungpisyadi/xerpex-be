@@ -10,12 +10,12 @@ services:
     # CHOOSE ONE OF THE FOLLOWING NETWORK CONFIGURATIONS:
     
     # Option 1: For Linux hosts (uncomment this line)
-    # network_mode: "host"
+    network_mode: "host"
     
     # Option 2: For Windows/macOS with Docker Desktop (default)
     # This uses the default bridge network which allows outbound connections
-    networks:
-      - kebunsu-network
+   #  networks:
+     #  - kebunsu-network
       
     # For Windows users with Docker Desktop connecting to a database on localhost:
     # Use extra_hosts to map host.docker.internal to the host IP
@@ -40,24 +40,6 @@ services:
     command: >
       bash -c "alembic upgrade head &&
               uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-
-  # MySQL service
-  mysql:
-    image: mysql:8.0
-    container_name: kebunsu-mysql
-    restart: always
-    ports:
-      - "3306:3306"
-    networks:
-      - kebunsu-network
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-root}
-      - MYSQL_DATABASE=${MYSQL_DB:-kebunsu_erp}
-      - MYSQL_USER=${MYSQL_USER:-root}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-root}
-    volumes:
-      - mysql-data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password
 
 # Define networks
 networks:
