@@ -30,7 +30,10 @@ class Settings(BaseSettings):
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """Get the database URI"""
-        return f"mysql+mysqldb://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_SERVER}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
+        # When server is localhost, explicitly use TCP by replacing with 127.0.0.1
+        # This prevents MySQLdb from trying to use a Unix socket
+        server = "127.0.0.1" if self.MYSQL_SERVER.lower() == "localhost" else self.MYSQL_SERVER
+        return f"mysql+mysqldb://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{server}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
     
     # CORS settings
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
