@@ -8,15 +8,15 @@ services:
     ports:
       - "8000:8000"
     # CHOOSE ONE OF THE FOLLOWING NETWORK CONFIGURATIONS:
-    
+
     # Option 1: For Linux hosts (uncomment this line)
     network_mode: "host"
-    
+
     # Option 2: For Windows/macOS with Docker Desktop (default)
     # This uses the default bridge network which allows outbound connections
    #  networks:
      #  - kebunsu-network
-      
+
     # For Windows users with Docker Desktop connecting to a database on localhost:
     # Use extra_hosts to map host.docker.internal to the host IP
     extra_hosts:
@@ -45,7 +45,3 @@ services:
 networks:
   kebunsu-network:
     driver: bridge
-
-# Define volumes
-volumes:
-  mysql-data:
