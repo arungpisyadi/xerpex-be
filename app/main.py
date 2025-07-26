@@ -120,7 +120,9 @@ async def db_health_check():
     """Database health check endpoint"""
     from sqlalchemy import text
     from app.database import get_db
+    import time
     
+    start_time = time.time()
     try:
         # Get database session
         db = next(get_db())
@@ -128,23 +130,71 @@ async def db_health_check():
         # Execute simple query with timeout
         result = db.execute(text("SELECT 1")).fetchone()
         
+        # Calculate response time
+        response_time = time.time() - start_time
+        
         if result and result[0] == 1:
             return {
                 "status": "healthy",
                 "database": "connected",
-                "message": "Database connection successful"
+                "message": "Database connection successful",
+                "response_time_seconds": response_time
             }
         else:
             return {
                 "status": "unhealthy",
                 "database": "error",
-                "message": "Database returned unexpected result"
+                "message": "Database returned unexpected result",
+                "response_time_seconds": response_time
             }
     except Exception as e:
+        # Calculate response time even for errors
+        response_time = time.time() - start_time
         return {
             "status": "unhealthy",
             "database": "error",
-            "message": f"Database connection failed: {str(e)}"
+            "message": f"Database connection failed: {str(e)}",
+            "response_time_seconds": response_time
+        }
+
+@app.get("/test-db-tables")
+async def test_db_tables():
+    """Test database tables endpoint"""
+    from sqlalchemy import text, inspect
+    from app.database import get_db, engine
+    import time
+    
+    start_time = time.time()
+    try:
+        # Get database session
+        db = next(get_db())
+        
+        # Get list of tables
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        # Test query on user table if it exists
+        user_count = None
+        if 'user' in tables:
+            result = db.execute(text("SELECT COUNT(*) FROM user")).fetchone()
+            user_count = result[0] if result else None
+        
+        # Calculate response time
+        response_time = time.time() - start_time
+        
+        return {
+            "status": "success",
+            "tables": tables,
+            "user_count": user_count,
+            "response_time_seconds": response_time
+        }
+    except Exception as e:
+        # Calculate response time even for errors
+        response_time = time.time() - start_time
+        return {
+            "status": "error",
+            "message": f"Database test failed: {str(e)}",
+            "response_time_seconds": response_time
         }
 
 
