@@ -8,6 +8,7 @@ fastapi==0.103.1
 h11==0.14.0
 idna==3.4
 mysql-connector-python==9.4.0
+mysqlclient==2.2.0
 passlib==1.7.4
 pydantic==2.3.0
 pydantic-settings==2.0.3
