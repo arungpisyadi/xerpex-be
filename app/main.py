@@ -2,7 +2,7 @@
 Main application entry point for the XerpeX ERP System
 """
 import json
-import sentry_sdk
+import logging
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,20 +12,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.controllers import auth, user, villa, booking, payment, report
 from app.controllers import settings as app_settings
-from app.utils.sentry import (
-    capture_exception,
-    capture_message,
-    get_request_info,
-    log_exception_with_request
-)
 
-# Initialize Sentry if enabled
-if settings.SENTRY_ENABLE and settings.SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
-        environment=settings.SENTRY_ENVIRONMENT,
-        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
-    )
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
@@ -44,46 +33,6 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-
-# Create a middleware to log request parameters
-class SentryMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Collect request data
-        request_info = get_request_info(request)
-        
-        # Try to parse request body if it's a POST/PUT/PATCH request
-        if request.method in ["POST", "PUT", "PATCH"]:
-            try:
-                body = await request.body()
-                if body:
-                    try:
-                        # Try to parse as JSON
-                        request_info["body"] = json.loads(body)
-                    except json.JSONDecodeError:
-                        # If not JSON, store as string (truncated if too large)
-                        body_str = body.decode("utf-8", errors="replace")
-                        request_info["body"] = body_str[:1000] + "..." if len(body_str) > 1000 else body_str
-            except Exception:
-                # If we can't read the body, just continue
-                pass
-        
-        # Add request info to Sentry scope
-        with sentry_sdk.configure_scope() as scope:
-            scope.set_context("request", request_info)
-        
-        # Process the request
-        try:
-            response = await call_next(request)
-            return response
-        except Exception as e:
-            # This will catch exceptions not caught by exception handlers
-            capture_exception(e, context={"request": request_info})
-            raise
-
-# Add the Sentry middleware if Sentry is enabled
-if settings.SENTRY_ENABLE:
-    app.add_middleware(SentryMiddleware)
 
 # Include API routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
@@ -202,8 +151,8 @@ async def test_db_tables():
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handler for HTTP exceptions"""
-    # Use the enhanced capture_exception which handles HTTPExceptions specially
-    capture_exception(exc, request=request)
+    # Log the exception
+    logger.error(f"HTTP Exception: {exc.status_code} - {exc.detail}")
     
     # Return the original response
     return JSONResponse(
@@ -215,8 +164,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler to capture all unhandled exceptions"""
-    # Use the convenience function to log exception with request
-    log_exception_with_request(exc, request)
+    # Log the exception
+    logger.error(f"Global Exception: {str(exc)}")
     
     return JSONResponse(
         status_code=500,

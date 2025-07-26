@@ -51,11 +51,11 @@ class Settings(BaseSettings):
                 return ["*"]
         return v
     
-    # Sentry settings
+    # Sentry settings (permanently disabled)
     SENTRY_DSN: Optional[str] = None
     SENTRY_ENVIRONMENT: str = "development"
-    SENTRY_TRACES_SAMPLE_RATE: float = 1.0  # 100% of transactions
-    SENTRY_ENABLE: bool = Field(default=False)
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0  # 0% of transactions
+    SENTRY_ENABLE: bool = Field(default=False, description="Permanently disabled")
     
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
