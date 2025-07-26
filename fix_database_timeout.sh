@@ -7,13 +7,23 @@ echo "Starting database timeout diagnosis..."
 
 # Load environment variables if available
 if [ -f .env ]; then
-    # Parse .env file manually to avoid issues with variable names
-    export $(grep -v '^#' .env | xargs -d '\n')
-    echo "Loaded environment variables from .env"
+    echo "Found .env file, extracting database credentials..."
+    # Extract database credentials directly
+    MYSQL_SERVER=$(grep MYSQL_SERVER .env | cut -d '=' -f2)
+    MYSQL_USER=$(grep MYSQL_USER .env | cut -d '=' -f2)
+    MYSQL_PASSWORD=$(grep MYSQL_PASSWORD .env | cut -d '=' -f2)
+    MYSQL_DB=$(grep MYSQL_DB .env | cut -d '=' -f2)
+    MYSQL_PORT=$(grep MYSQL_PORT .env | cut -d '=' -f2)
+    echo "Loaded database credentials from .env"
 elif [ -f .env.staging ]; then
-    # Parse .env.staging file manually
-    export $(grep -v '^#' .env.staging | xargs -d '\n')
-    echo "Loaded environment variables from .env.staging"
+    echo "Found .env.staging file, extracting database credentials..."
+    # Extract database credentials directly
+    MYSQL_SERVER=$(grep MYSQL_SERVER .env.staging | cut -d '=' -f2)
+    MYSQL_USER=$(grep MYSQL_USER .env.staging | cut -d '=' -f2)
+    MYSQL_PASSWORD=$(grep MYSQL_PASSWORD .env.staging | cut -d '=' -f2)
+    MYSQL_DB=$(grep MYSQL_DB .env.staging | cut -d '=' -f2)
+    MYSQL_PORT=$(grep MYSQL_PORT .env.staging | cut -d '=' -f2)
+    echo "Loaded database credentials from .env.staging"
 else
     echo "No .env file found. Please enter database credentials manually:"
     read -p "MySQL Host: " MYSQL_SERVER
@@ -23,6 +33,13 @@ else
     read -p "MySQL Database: " MYSQL_DB
     read -p "MySQL Port: " MYSQL_PORT
 fi
+
+# Display the credentials (without password)
+echo "Using database credentials:"
+echo "Host: $MYSQL_SERVER"
+echo "User: $MYSQL_USER"
+echo "Database: $MYSQL_DB"
+echo "Port: $MYSQL_PORT"
 
 # Check MySQL connection
 echo "Testing MySQL connection..."
