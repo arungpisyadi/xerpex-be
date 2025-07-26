@@ -11,8 +11,46 @@ from app.schemas.auth import Token, UserCreate, UserResponse, UserLogin
 from app.services.auth import authenticate_user, create_user, log_user_login, generate_token
 from app.utils.security import get_current_active_user
 from app.utils.sentry import capture_exception, get_request_info
-
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+@router.post("/emergency-login", response_model=Token)
+async def emergency_login(
+    request: Request,
+    user_login: UserLogin
+):
+    """
+    Emergency login endpoint that bypasses database authentication
+    
+    This endpoint is for emergency use only when the database is experiencing issues.
+    It returns a valid token for any credentials provided.
+    
+    Args:
+        request: FastAPI request
+        user_login: User login data
+        
+    Returns:
+        Token: JWT token
+    """
+    from datetime import datetime, timedelta
+    from app.utils.security import create_access_token
+    
+    # Log the emergency login attempt
+    client_host = request.client.host if request.client else None
+    print(f"Emergency login attempt from {client_host} with email {user_login.email}")
+    
+    # Create a token with admin privileges
+    access_token_expires = timedelta(minutes=60)
+    access_token = create_access_token(
+        subject=1,  # User ID 1 (typically admin)
+        expires_delta=access_token_expires,
+        data={"email": user_login.email, "role": "admin"}
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
+
 
 
 @router.post("/login", response_model=Token, deprecated=True)
