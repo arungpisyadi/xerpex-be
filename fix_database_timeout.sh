@@ -75,12 +75,12 @@ mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SH
 mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SHOW PROCESSLIST;"
 
 # Check user table structure
-echo "Checking user table structure..."
-mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "DESCRIBE user;"
+echo "Checking users table structure..."
+mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "DESCRIBE users;"
 
 # Check for indexes on user table
 echo "Checking for indexes on user table..."
-mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SHOW INDEX FROM user;"
+mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SHOW INDEX FROM users;"
 
 # Add indexes if needed
 echo "Would you like to add indexes to the email and username columns? (y/n)"
@@ -90,13 +90,13 @@ if [ "$add_indexes" == "y" ]; then
     echo "Adding indexes to user table..."
     
     # Check if indexes already exist
-    email_index=$(mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SHOW INDEX FROM user WHERE Column_name='email';" 2>/dev/null | grep -c "email" || true)
-    username_index=$(mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SHOW INDEX FROM user WHERE Column_name='username';" 2>/dev/null | grep -c "username" || true)
+    email_index=$(mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SHOW INDEX FROM users WHERE Column_name='email';" 2>/dev/null | grep -c "email" || true)
+    username_index=$(mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "SHOW INDEX FROM uses WHERE Column_name='username';" 2>/dev/null | grep -c "username" || true)
     
     # Add email index if it doesn't exist
     if [ "$email_index" -eq 0 ]; then
         echo "Adding index to email column..."
-        mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "CREATE INDEX idx_user_email ON user(email);"
+        mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "CREATE INDEX idx_user_email ON users(email);"
     else
         echo "Index on email column already exists."
     fi
@@ -104,7 +104,7 @@ if [ "$add_indexes" == "y" ]; then
     # Add username index if it doesn't exist
     if [ "$username_index" -eq 0 ]; then
         echo "Adding index to username column..."
-        mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "CREATE INDEX idx_user_username ON user(username);"
+        mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "CREATE INDEX idx_user_username ON users(username);"
     else
         echo "Index on username column already exists."
     fi
@@ -118,7 +118,7 @@ read optimize_table
 
 if [ "$optimize_table" == "y" ]; then
     echo "Optimizing user table..."
-    mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "OPTIMIZE TABLE user;"
+    mysql -h "$MYSQL_SERVER" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DB" -e "OPTIMIZE TABLE users;"
     echo "Table optimized successfully!"
 fi
 
