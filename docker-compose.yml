@@ -6,7 +6,7 @@ services:
     container_name: kebunsu-api
     restart: always
     ports:
-      - "8000:8000"
+      - "8001:8000"  # Changed host port from 8000 to 8001 to avoid conflicts
     # CHOOSE ONE OF THE FOLLOWING NETWORK CONFIGURATIONS:
 
     # Option 1: For Linux hosts (uncomment this line)
@@ -38,7 +38,7 @@ services:
     volumes:
       - ./:/app
     command: >
-      bash -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      bash -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-port 8100"
 
 # Define networks
 networks:
