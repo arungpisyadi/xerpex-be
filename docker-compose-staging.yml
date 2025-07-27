@@ -36,7 +36,7 @@ services:
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["http://localhost:3000","http://localhost:8000","https://kebunsu-staging.tugugroup.co.id"]}
     volumes:
       - ./:/app
-    command: >
-      bash -c "alembic upgrade head"
+    # command: >
+    #   bash -c "alembic upgrade head"
 
 # Using default bridge network - no custom networks needed
