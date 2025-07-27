@@ -40,13 +40,17 @@ class Settings(BaseSettings):
     def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
         """Parse CORS origins from string or list."""
         if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
+            # Use a set to remove duplicates, then convert back to list
+            return list(set(i.strip() for i in v.split(",")))
         if isinstance(v, str):
             try:
-                return json.loads(v)
+                # Parse JSON and remove duplicates
+                origins = json.loads(v)
+                return list(set(origins)) if isinstance(origins, list) else origins
             except json.JSONDecodeError:
                 return ["*"]
-        return v
+        # If it's already a list, remove duplicates
+        return list(set(v)) if isinstance(v, list) else v
     
     # Sentry settings
     SENTRY_DSN: Optional[str] = None
