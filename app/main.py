@@ -34,38 +34,41 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
-# Custom CORS middleware to handle the specific login endpoint
-class CustomCORSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Get the response from the next middleware/route handler
-        response = await call_next(request)
-        
-        # Check if this is the login endpoint
-        if request.url.path == "/api/v1/auth/login/json":
-            # Clear any existing CORS headers to prevent duplicates
-            for header in list(response.headers.keys()):
-                if header.lower().startswith("access-control-"):
-                    del response.headers[header]
-            
-            # Set CORS headers manually
-            response.headers["Access-Control-Allow-Origin"] = "https://kebunsu-staging.tugugroup.co.id"
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "*"
-            response.headers["Access-Control-Allow-Headers"] = "*"
-        
-        return response
+# CORS is now handled by Nginx
+# Commenting out all CORS middleware to prevent duplicate headers
 
-# Add our custom CORS middleware first (it will be executed last in the request lifecycle)
-app.add_middleware(CustomCORSMiddleware)
-
-# Set up standard CORS middleware for all other endpoints
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://kebunsu-staging.tugugroup.co.id"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# # Custom CORS middleware to handle the specific login endpoint
+# class CustomCORSMiddleware(BaseHTTPMiddleware):
+#     async def dispatch(self, request: Request, call_next):
+#         # Get the response from the next middleware/route handler
+#         response = await call_next(request)
+#
+#         # Check if this is the login endpoint
+#         if request.url.path == "/api/v1/auth/login/json":
+#             # Clear any existing CORS headers to prevent duplicates
+#             for header in list(response.headers.keys()):
+#                 if header.lower().startswith("access-control-"):
+#                     del response.headers[header]
+#
+#             # Set CORS headers manually
+#             response.headers["Access-Control-Allow-Origin"] = "https://kebunsu-staging.tugugroup.co.id"
+#             response.headers["Access-Control-Allow-Credentials"] = "true"
+#             response.headers["Access-Control-Allow-Methods"] = "*"
+#             response.headers["Access-Control-Allow-Headers"] = "*"
+#
+#         return response
+#
+# # Add our custom CORS middleware first (it will be executed last in the request lifecycle)
+# app.add_middleware(CustomCORSMiddleware)
+#
+# # Set up standard CORS middleware for all other endpoints
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["https://kebunsu-staging.tugugroup.co.id"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 
 # Create a middleware to log request parameters
