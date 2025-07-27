@@ -14,7 +14,23 @@ from datetime import datetime
 try:
     from app.database import SessionLocal
     from app.models.user import User, UserActivity
-    from app.utils.security import get_password_hash
+    
+    # Try to import from app.utils.security, but if it fails, define our own function
+    try:
+        from app.utils.security import get_password_hash
+    except ImportError:
+        from passlib.context import CryptContext
+        # Configure bcrypt with specific settings to avoid version compatibility issues
+        pwd_context = CryptContext(
+            schemes=["bcrypt"],
+            deprecated="auto",
+            bcrypt__ident="2b",  # Use the 2b identifier which is widely supported
+            bcrypt__min_rounds=12  # Set minimum rounds for security
+        )
+        
+        def get_password_hash(password: str) -> str:
+            """Hash a password"""
+            return pwd_context.hash(password)
 except ImportError:
     print("Error: Could not import required modules from the application.")
     print("Make sure you're running this script from the project root directory.")
@@ -82,7 +98,18 @@ def create_admin_user(email, password, username=None, full_name=None):
         db.add(activity)
         db.commit()
         
-        return user
+        # Capture user information before closing the session
+        user_info = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role
+        }
+        
+        # Close the session
+        db.close()
+        
+        return user_info
     
     except Exception as e:
         db.rollback()
@@ -90,7 +117,8 @@ def create_admin_user(email, password, username=None, full_name=None):
         sys.exit(1)
     
     finally:
-        db.close()
+        if db.is_active:
+            db.close()
 
 
 def main():
@@ -114,7 +142,7 @@ def main():
         sys.exit(1)
     
     # Create admin user
-    user = create_admin_user(
+    user_info = create_admin_user(
         email=args.email,
         password=args.password,
         username=args.username,
@@ -122,10 +150,10 @@ def main():
     )
     
     print(f"Admin user created successfully:")
-    print(f"  ID: {user.id}")
-    print(f"  Username: {user.username}")
-    print(f"  Email: {user.email}")
-    print(f"  Role: {user.role}")
+    print(f"  ID: {user_info['id']}")
+    print(f"  Username: {user_info['username']}")
+    print(f"  Email: {user_info['email']}")
+    print(f"  Role: {user_info['role']}")
 
 
 if __name__ == "__main__":

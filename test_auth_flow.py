@@ -2,9 +2,16 @@
 Test script for authentication flow in XerpeX ERP System
 """
 import sys
-import requests
 import json
 from typing import Dict, Any, Optional
+
+# Try to import requests, provide helpful error if not available
+try:
+    import requests
+except ImportError:
+    print("Error: The 'requests' package is required for this script.")
+    print("Please install it using: pip install requests")
+    sys.exit(1)
 
 # Base URL for API
 BASE_URL = "http://localhost:8000/api/v1"
