@@ -10,8 +10,7 @@ services:
     # This allows outbound connections to external resources
     ports:
       - "8000:8000"
-    networks:
-      - kebunsu-network
+    # Using default bridge network - no custom networks needed
     
     # NOTE: Do not use host network mode with remote database connections
     # network_mode: "host"
@@ -38,9 +37,6 @@ services:
     volumes:
       - ./:/app
     command: >
-      bash -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      bash -c "alembic upgrade head"
 
-# Define networks
-networks:
-  kebunsu-network:
-    driver: bridge
+# Using default bridge network - no custom networks needed

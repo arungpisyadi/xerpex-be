@@ -9,13 +9,12 @@ services:
       - "8000:8000"
     # CHOOSE ONE OF THE FOLLOWING NETWORK CONFIGURATIONS:
 
-    # Option 1: For Linux hosts (uncomment this line)
-    network_mode: "host"
+    # Option 1: For Linux hosts (uncomment this line if needed)
+    # network_mode: "host"
 
     # Option 2: For Windows/macOS with Docker Desktop (default)
     # This uses the default bridge network which allows outbound connections
-    #  networks:
-      #  - kebunsu-network
+    # No custom network needed - using default bridge network
 
     # For Windows users with Docker Desktop connecting to a database on localhost:
     # Use extra_hosts to map host.docker.internal to the host IP
@@ -40,7 +39,4 @@ services:
     # command: >
     #   bash -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
-# Define networks
-networks:
-  kebunsu-network:
-    driver: bridge
+# Using default bridge network - no custom networks needed
