@@ -28,7 +28,22 @@ except ImportError:
 load_dotenv()
 
 # Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Monkey patch for bcrypt 4.x compatibility with passlib
+try:
+    import bcrypt
+    if not hasattr(bcrypt, '__about__'):
+        bcrypt.__about__ = type('obj', (object,), {
+            '__version__': bcrypt.__version__
+        })
+except ImportError:
+    pass  # bcrypt might not be imported yet
+
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__ident="2b",  # Use the 2b identifier which is widely supported
+    bcrypt__min_rounds=12  # Set minimum rounds for security
+)
 
 
 def get_password_hash(password: str) -> str:

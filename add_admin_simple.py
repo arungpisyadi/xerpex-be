@@ -21,6 +21,13 @@ try:
     except ImportError:
         from passlib.context import CryptContext
         # Configure bcrypt with specific settings to avoid version compatibility issues
+        # Monkey patch for bcrypt 4.x compatibility with passlib
+        import bcrypt
+        if not hasattr(bcrypt, '__about__'):
+            bcrypt.__about__ = type('obj', (object,), {
+                '__version__': bcrypt.__version__
+            })
+            
         pwd_context = CryptContext(
             schemes=["bcrypt"],
             deprecated="auto",
