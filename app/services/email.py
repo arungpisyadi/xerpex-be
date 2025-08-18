@@ -229,3 +229,87 @@ async def send_survey_status_update_notification(
     except Exception as e:
         logger.error(f"Failed to send survey status update notification to {recipient_email}: {str(e)}")
         return False
+
+
+async def send_survey_notification_to_sales_team(
+    sales_admin_email: Optional[str],
+    sales_director_email: Optional[str],
+    survey_data: dict,
+    salesman_name: Optional[str] = None
+) -> bool:
+    """
+    Send survey notification to sales admin and director
+    
+    Args:
+        sales_admin_email: Sales admin's email address
+        sales_director_email: Sales director's email address
+        survey_data: Survey information
+        salesman_name: Assigned salesman's name
+        
+    Returns:
+        bool: True if at least one email sent successfully
+    """
+    if not fastmail:
+        logger.warning("Email service not configured. Skipping sales team notification.")
+        return False
+    
+    success_count = 0
+    recipients = []
+    
+    # Add recipients if emails are configured
+    if sales_admin_email:
+        recipients.append(sales_admin_email)
+    if sales_director_email:
+        recipients.append(sales_director_email)
+    
+    if not recipients:
+        logger.warning("No sales team email addresses configured. Skipping sales team notification.")
+        return False
+        
+    try:
+        html_content = f"""
+        <html>
+        <body>
+            <h2>New Survey Submission - Sales Team Notification</h2>
+            <p>Dear Sales Team,</p>
+            
+            <p>A new survey has been submitted to the XerpeX ERP System. Please find the details below:</p>
+            
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3>Survey Details:</h3>
+                <p><strong>Client Name:</strong> {survey_data.get('client_name', 'N/A')}</p>
+                <p><strong>Email:</strong> {survey_data.get('email', 'N/A')}</p>
+                <p><strong>Phone:</strong> {survey_data.get('phone_number', 'N/A')}</p>
+                <p><strong>Estimated Paxes:</strong> {survey_data.get('estimated_paxes', 'N/A')}</p>
+                <p><strong>Villa Types:</strong> {survey_data.get('villa_types', 'N/A')}</p>
+                <p><strong>Priority:</strong> {survey_data.get('priority', 'medium').upper()}</p>
+                <p><strong>Status:</strong> {survey_data.get('status', 'new').upper()}</p>
+                <p><strong>Assigned to:</strong> {salesman_name or 'Default Salesman'}</p>
+                {f"<p><strong>Follow-up Date:</strong> {survey_data.get('follow_up_date', 'Not set')}</p>" if survey_data.get('follow_up_date') else ""}
+                {f"<p><strong>Visiting Date:</strong> {survey_data.get('visiting_date', 'Not set')}</p>" if survey_data.get('visiting_date') else ""}
+                {f"<p><strong>Notes:</strong> {survey_data.get('notes', 'No notes')}</p>" if survey_data.get('notes') else ""}
+            </div>
+            
+            <p>This is an automated notification to keep the sales team informed of new survey submissions.</p>
+            <p>Please log into the system to review and manage this survey as needed.</p>
+            
+            <p>Best regards,<br>
+            XerpeX ERP System</p>
+        </body>
+        </html>
+        """
+        
+        message = MessageSchema(
+            subject="New Survey Submission - Sales Team Notification",
+            recipients=recipients,
+            body=html_content,
+            subtype=MessageType.html
+        )
+        
+        await fastmail.send_message(message)
+        logger.info(f"Survey notification sent to sales team: {', '.join(recipients)}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send survey notification to sales team {recipients}: {str(e)}")
+        return False

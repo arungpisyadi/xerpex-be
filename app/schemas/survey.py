@@ -3,10 +3,11 @@ Survey schemas for the XerpeX ERP System
 """
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from enum import Enum
 
 from app.schemas.salesmen import SalesmenSummary
+from app.utils.helpers import sanitize_phone_number
 
 
 class SurveyStatus(str, Enum):
@@ -41,6 +42,12 @@ class SurveyBase(BaseModel):
     follow_up_date: Optional[date] = None
     visiting_date: Optional[date] = None
     salesmen_id: Optional[int] = 1
+    
+    @field_validator('phone_number')
+    @classmethod
+    def sanitize_phone(cls, v: Optional[str]) -> Optional[str]:
+        """Sanitize phone number according to Indonesian format"""
+        return sanitize_phone_number(v)
 
 
 class SurveyCreate(SurveyBase):

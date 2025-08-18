@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     
     # Email settings
     ADMIN_EMAIL: Optional[str] = None
+    SALES_ADMIN_EMAIL: Optional[str] = None
+    SALES_DIRECTOR_EMAIL: Optional[str] = None
     MAIL_USERNAME: Optional[str] = None
     MAIL_PASSWORD: Optional[str] = None
     MAIL_FROM: Optional[str] = None

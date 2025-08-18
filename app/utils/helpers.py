@@ -75,3 +75,41 @@ def calculate_nights(check_in: date, check_out: date) -> int:
     """
     delta = check_out - check_in
     return delta.days
+
+
+def sanitize_phone_number(phone_number: Optional[str]) -> Optional[str]:
+    """
+    Sanitize phone number according to Indonesian format
+    
+    Rules:
+    - Replace leading 0 with 62
+    - Replace +62 with 62
+    - Remove "-" (hyphens)
+    - Remove spaces
+    
+    Args:
+        phone_number: Raw phone number string
+        
+    Returns:
+        str: Sanitized phone number or None if input is None/empty
+        
+    Examples:
+        "0812-3456-7890" -> "6281234567890"
+        "+62 812 3456 7890" -> "6281234567890"
+        "+62-812-345-6789" -> "62812345678"
+        "812 345 6789" -> "812345678"
+    """
+    if not phone_number or not phone_number.strip():
+        return None
+    
+    # Remove all spaces and hyphens
+    sanitized = phone_number.replace(" ", "").replace("-", "")
+    
+    # Replace +62 with 62 (handle country code)
+    if sanitized.startswith("+62"):
+        sanitized = "62" + sanitized[3:]
+    # Replace leading 0 with 62 (Indonesian mobile format)
+    elif sanitized.startswith("0"):
+        sanitized = "62" + sanitized[1:]
+    
+    return sanitized

@@ -15,7 +15,8 @@ from app.schemas.survey import SurveyCreate, SurveyUpdate, SurveyStatus, SurveyP
 from app.services.email import (
     send_survey_notification_to_salesman,
     send_survey_notification_to_admin,
-    send_survey_status_update_notification
+    send_survey_status_update_notification,
+    send_survey_notification_to_sales_team
 )
 from app.config import settings
 def get_survey(db: Session, survey_id: int) -> Optional[Survey]:
@@ -166,6 +167,14 @@ async def create_survey(db: Session, survey: SurveyCreate) -> Survey:
                 survey_data=survey_data,
                 salesman_name=db_survey.salesman.full_name if db_survey.salesman else "Default Salesman"
             )
+        
+        # Send to sales team (admin and director) if configured
+        await send_survey_notification_to_sales_team(
+            sales_admin_email=settings.SALES_ADMIN_EMAIL,
+            sales_director_email=settings.SALES_DIRECTOR_EMAIL,
+            survey_data=survey_data,
+            salesman_name=db_survey.salesman.full_name if db_survey.salesman else "Default Salesman"
+        )
     except Exception as e:
         # Log error but don't fail the survey creation
         print(f"Failed to send email notifications: {str(e)}")
