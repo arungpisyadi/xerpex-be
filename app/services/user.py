@@ -10,10 +10,6 @@ from sqlalchemy.orm import Session
 from app.models.user import User, UserActivity
 from app.schemas.user import UserCreate, UserUpdate
 from app.utils.security import get_password_hash
-from app.utils.sentry import sentry_monitored_service
-
-
-@sentry_monitored_service
 def get_user(db: Session, user_id: int) -> Optional[User]:
     """
     Get a user by ID
@@ -28,7 +24,6 @@ def get_user(db: Session, user_id: int) -> Optional[User]:
     return db.query(User).filter(User.id == user_id).first()
 
 
-@sentry_monitored_service
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     """
     Get a user by email
@@ -43,7 +38,6 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
 
-@sentry_monitored_service
 def get_user_by_username(db: Session, username: str) -> Optional[User]:
     """
     Get a user by username
@@ -58,7 +52,6 @@ def get_user_by_username(db: Session, username: str) -> Optional[User]:
     return db.query(User).filter(User.username == username).first()
 
 
-@sentry_monitored_service
 def get_users(
     db: Session, 
     skip: int = 0, 
@@ -90,7 +83,6 @@ def get_users(
     return query.offset(skip).limit(limit).all()
 
 
-@sentry_monitored_service
 def create_user(db: Session, user: UserCreate) -> User:
     """
     Create a new user
@@ -142,7 +134,6 @@ def create_user(db: Session, user: UserCreate) -> User:
     return db_user
 
 
-@sentry_monitored_service
 def update_user(db: Session, user_id: int, user_update: UserUpdate) -> User:
     """
     Update a user
@@ -202,7 +193,6 @@ def update_user(db: Session, user_id: int, user_update: UserUpdate) -> User:
     return db_user
 
 
-@sentry_monitored_service
 def delete_user(db: Session, user_id: int) -> bool:
     """
     Delete a user
@@ -230,7 +220,6 @@ def delete_user(db: Session, user_id: int) -> bool:
     return True
 
 
-@sentry_monitored_service
 def get_user_activities(
     db: Session, 
     user_id: int, 

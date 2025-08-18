@@ -12,10 +12,6 @@ from app.database import get_db
 from app.models.user import User, UserActivity
 from app.schemas.auth import UserCreate
 from app.utils.security import verify_password, get_password_hash, create_access_token
-from app.utils.sentry import sentry_monitored_service
-
-
-@sentry_monitored_service
 def authenticate_user(db: Session, username_or_email: str, password: str) -> Optional[User]:
     """
     Authenticate a user using either username or email
@@ -40,7 +36,6 @@ def authenticate_user(db: Session, username_or_email: str, password: str) -> Opt
     return user
 
 
-@sentry_monitored_service
 def create_user(db: Session, user_data: UserCreate) -> User:
     """
     Create a new user
@@ -101,7 +96,6 @@ def create_user(db: Session, user_data: UserCreate) -> User:
     return db_user
 
 
-@sentry_monitored_service
 def log_user_login(db: Session, user_id: int, ip_address: Optional[str] = None) -> None:
     """
     Log user login
@@ -128,7 +122,6 @@ def log_user_login(db: Session, user_id: int, ip_address: Optional[str] = None) 
         db.commit()
 
 
-@sentry_monitored_service
 def generate_token(user: User) -> dict:
     """
     Generate JWT token for user

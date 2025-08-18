@@ -17,10 +17,6 @@ from app.schemas.payment import (
 )
 from app.services.booking import get_booking
 from app.utils.helpers import generate_invoice_number
-from app.utils.sentry import sentry_monitored_service
-
-
-@sentry_monitored_service
 def get_payment(db: Session, payment_id: int) -> Optional[Payment]:
     """
     Get a payment by ID
@@ -35,7 +31,6 @@ def get_payment(db: Session, payment_id: int) -> Optional[Payment]:
     return db.query(Payment).filter(Payment.id == payment_id).first()
 
 
-@sentry_monitored_service
 def get_payments(
     db: Session, 
     skip: int = 0, 
@@ -82,7 +77,6 @@ def get_payments(
     return query.order_by(Payment.created_at.desc()).offset(skip).limit(limit).all()
 
 
-@sentry_monitored_service
 def create_payment(db: Session, payment: PaymentCreate, current_user_id: int) -> Payment:
     """
     Create a new payment
@@ -126,7 +120,6 @@ def create_payment(db: Session, payment: PaymentCreate, current_user_id: int) ->
     return db_payment
 
 
-@sentry_monitored_service
 def update_payment(db: Session, payment_id: int, payment_update: PaymentUpdate) -> Payment:
     """
     Update a payment
@@ -162,7 +155,6 @@ def update_payment(db: Session, payment_id: int, payment_update: PaymentUpdate) 
     return db_payment
 
 
-@sentry_monitored_service
 def update_payment_status(db: Session, payment_id: int, status_update: PaymentStatusUpdate) -> Payment:
     """
     Update a payment status
@@ -201,7 +193,6 @@ def update_payment_status(db: Session, payment_id: int, status_update: PaymentSt
     return db_payment
 
 
-@sentry_monitored_service
 def delete_payment(db: Session, payment_id: int) -> bool:
     """
     Delete a payment
@@ -229,7 +220,6 @@ def delete_payment(db: Session, payment_id: int) -> bool:
     return True
 
 
-@sentry_monitored_service
 def get_invoice(db: Session, invoice_id: int) -> Optional[Invoice]:
     """
     Get an invoice by ID
@@ -244,7 +234,6 @@ def get_invoice(db: Session, invoice_id: int) -> Optional[Invoice]:
     return db.query(PaymentInvoice).filter(PaymentInvoice.id == invoice_id).first()
 
 
-@sentry_monitored_service
 def get_invoice_by_number(db: Session, invoice_number: str) -> Optional[Invoice]:
     """
     Get an invoice by number
@@ -259,7 +248,6 @@ def get_invoice_by_number(db: Session, invoice_number: str) -> Optional[Invoice]
     return db.query(PaymentInvoice).filter(PaymentInvoice.invoice_number == invoice_number).first()
 
 
-@sentry_monitored_service
 def get_invoices(
     db: Session, 
     skip: int = 0, 
@@ -306,7 +294,6 @@ def get_invoices(
     return query.order_by(Invoice.created_at.desc()).offset(skip).limit(limit).all()
 
 
-@sentry_monitored_service
 def create_invoice(db: Session, invoice: PaymentInvoiceCreate, current_user_id: int) -> Invoice:
     """
     Create a new invoice
@@ -385,7 +372,6 @@ def create_invoice(db: Session, invoice: PaymentInvoiceCreate, current_user_id: 
     return db_invoice
 
 
-@sentry_monitored_service
 def update_invoice(db: Session, invoice_id: int, invoice_update: PaymentInvoiceUpdate) -> Invoice:
     """
     Update an invoice
@@ -460,7 +446,6 @@ def update_invoice(db: Session, invoice_id: int, invoice_update: PaymentInvoiceU
     return db_invoice
 
 
-@sentry_monitored_service
 def update_invoice_status(db: Session, invoice_id: int, status: str) -> Invoice:
     """
     Update an invoice status
@@ -499,7 +484,6 @@ def update_invoice_status(db: Session, invoice_id: int, status: str) -> Invoice:
     return db_invoice
 
 
-@sentry_monitored_service
 def delete_invoice(db: Session, invoice_id: int) -> bool:
     """
     Delete an invoice
@@ -531,7 +515,6 @@ def delete_invoice(db: Session, invoice_id: int) -> bool:
     return True
 
 
-@sentry_monitored_service
 def get_payment_details(db: Session, payment_id: int) -> Dict[str, Any]:
     """
     Get payment details with related information
@@ -572,7 +555,6 @@ def get_payment_details(db: Session, payment_id: int) -> Dict[str, Any]:
     return result
 
 
-@sentry_monitored_service
 def link_payment_to_invoice(db: Session, payment_id: int, invoice_id: int) -> Payment:
     """
     Link a payment to an invoice
@@ -617,7 +599,6 @@ def link_payment_to_invoice(db: Session, payment_id: int, invoice_id: int) -> Pa
     return db_payment
 
 
-@sentry_monitored_service
 def get_booking_payment_summary(db: Session, booking_id: int) -> Dict[str, Any]:
     """
     Get payment summary for a booking

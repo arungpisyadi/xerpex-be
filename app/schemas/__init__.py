@@ -28,3 +28,10 @@ from app.schemas.report import (
     VillaOccupancyItem, VillaOccupancyReport, BookingStatusItem, BookingStatusReport,
     RevenueItem, RevenueReport, TopVillaItem, TopVillasReport, DashboardSummary
 )
+from app.schemas.salesmen import (
+    SalesmenBase, SalesmenCreate, SalesmenUpdate, SalesmenInDB, Salesmen, SalesmenSummary
+)
+from app.schemas.survey import (
+    SurveyStatus, SurveyPriority, SurveyBase, SurveyCreate, SurveyUpdate, SurveyStatusUpdate,
+    SurveyInDB, Survey, SurveyWithSalesman, SurveyStats, SalesmanStats
+)

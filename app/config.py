@@ -52,6 +52,17 @@ class Settings(BaseSettings):
         # If it's already a list, remove duplicates
         return list(set(v)) if isinstance(v, list) else v
     
+    # Email settings
+    ADMIN_EMAIL: Optional[str] = None
+    MAIL_USERNAME: Optional[str] = None
+    MAIL_PASSWORD: Optional[str] = None
+    MAIL_FROM: Optional[str] = None
+    MAIL_PORT: int = 587
+    MAIL_SERVER: Optional[str] = None
+    MAIL_FROM_NAME: str = "XerpeX ERP System"
+    MAIL_STARTTLS: bool = True
+    MAIL_SSL_TLS: bool = False
+    
     # Sentry settings
     SENTRY_DSN: Optional[str] = None
     SENTRY_ENVIRONMENT: str = "development"

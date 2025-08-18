@@ -10,10 +10,6 @@ from sqlalchemy.orm import Session
 
 from app.models.villa import Villa, VillaAvailability
 from app.schemas.villa import VillaCreate, VillaUpdate, VillaAvailabilityCreate, VillaAvailabilityUpdate
-from app.utils.sentry import sentry_monitored_service
-
-
-@sentry_monitored_service
 def get_villa(db: Session, villa_id: int) -> Optional[Villa]:
     """
     Get a villa by ID
@@ -28,7 +24,6 @@ def get_villa(db: Session, villa_id: int) -> Optional[Villa]:
     return db.query(Villa).filter(Villa.id == villa_id).first()
 
 
-@sentry_monitored_service
 def get_villas(
     db: Session, 
     skip: int = 0, 
@@ -65,7 +60,6 @@ def get_villas(
     return query.offset(skip).limit(limit).all()
 
 
-@sentry_monitored_service
 def create_villa(db: Session, villa: VillaCreate) -> Villa:
     """
     Create a new villa
@@ -95,7 +89,6 @@ def create_villa(db: Session, villa: VillaCreate) -> Villa:
     return db_villa
 
 
-@sentry_monitored_service
 def update_villa(db: Session, villa_id: int, villa_update: VillaUpdate) -> Villa:
     """
     Update a villa
@@ -131,7 +124,6 @@ def update_villa(db: Session, villa_id: int, villa_update: VillaUpdate) -> Villa
     return db_villa
 
 
-@sentry_monitored_service
 def delete_villa(db: Session, villa_id: int) -> bool:
     """
     Delete a villa
@@ -159,7 +151,6 @@ def delete_villa(db: Session, villa_id: int) -> bool:
     return True
 
 
-@sentry_monitored_service
 def get_villa_availability(
     db: Session, 
     villa_id: int, 
@@ -195,7 +186,6 @@ def get_villa_availability(
     ).all()
 
 
-@sentry_monitored_service
 def create_villa_availability(
     db: Session, 
     availability: VillaAvailabilityCreate, 
@@ -250,7 +240,6 @@ def create_villa_availability(
     return db_availability
 
 
-@sentry_monitored_service
 def update_villa_availability(
     db: Session, 
     villa_id: int, 
@@ -311,7 +300,6 @@ def update_villa_availability(
     return db_availability
 
 
-@sentry_monitored_service
 def check_villa_availability(
     db: Session, 
     villa_id: Optional[int], 

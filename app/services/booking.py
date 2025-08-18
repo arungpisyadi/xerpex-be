@@ -18,10 +18,6 @@ from app.schemas.booking import (
 )
 from app.services.villa import get_villa, check_villa_availability
 from app.utils.helpers import generate_booking_code, calculate_nights
-from app.utils.sentry import sentry_monitored_service
-
-
-@sentry_monitored_service
 def get_booking(db: Session, booking_id: int) -> Optional[Booking]:
     """
     Get a booking by ID
@@ -36,7 +32,6 @@ def get_booking(db: Session, booking_id: int) -> Optional[Booking]:
     return db.query(Booking).filter(Booking.id == booking_id).first()
 
 
-@sentry_monitored_service
 def get_booking_by_code(db: Session, booking_code: str) -> Optional[Booking]:
     """
     Get a booking by code
@@ -51,7 +46,6 @@ def get_booking_by_code(db: Session, booking_code: str) -> Optional[Booking]:
     return db.query(Booking).filter(Booking.booking_code == booking_code).first()
 
 
-@sentry_monitored_service
 def get_bookings(
     db: Session, 
     skip: int = 0, 
@@ -98,7 +92,6 @@ def get_bookings(
     return query.order_by(Booking.created_at.desc()).offset(skip).limit(limit).all()
 
 
-@sentry_monitored_service
 def create_booking(db: Session, booking: BookingCreate, current_user_id: int) -> Booking:
     """
     Create a new booking
@@ -224,7 +217,6 @@ def create_booking(db: Session, booking: BookingCreate, current_user_id: int) ->
     return db_booking
 
 
-@sentry_monitored_service
 def update_booking(db: Session, booking_id: int, booking_update: BookingUpdate) -> Booking:
     """
     Update a booking
@@ -277,7 +269,6 @@ def update_booking(db: Session, booking_id: int, booking_update: BookingUpdate) 
     return db_booking
 
 
-@sentry_monitored_service
 def update_booking_status(db: Session, booking_id: int, status_update: BookingStatusUpdate) -> Booking:
     """
     Update a booking status
@@ -316,7 +307,6 @@ def update_booking_status(db: Session, booking_id: int, status_update: BookingSt
     return db_booking
 
 
-@sentry_monitored_service
 def delete_booking(db: Session, booking_id: int) -> bool:
     """
     Delete a booking
@@ -363,7 +353,6 @@ def delete_booking(db: Session, booking_id: int) -> bool:
     return True
 
 
-@sentry_monitored_service
 def add_booking_villa(db: Session, booking_id: int, villa_data: BookingVillaCreate) -> BookingVilla:
     """
     Add a villa to a booking
@@ -447,7 +436,6 @@ def add_booking_villa(db: Session, booking_id: int, villa_data: BookingVillaCrea
     return db_booking_villa
 
 
-@sentry_monitored_service
 def remove_booking_villa(db: Session, booking_id: int, villa_id: int) -> bool:
     """
     Remove a villa from a booking
@@ -505,7 +493,6 @@ def remove_booking_villa(db: Session, booking_id: int, villa_id: int) -> bool:
     return True
 
 
-@sentry_monitored_service
 def add_booking_package(db: Session, booking_id: int, package_data: BookingPackageCreate) -> BookingPackage:
     """
     Add a package to a booking
@@ -543,7 +530,6 @@ def add_booking_package(db: Session, booking_id: int, package_data: BookingPacka
     return db_booking_package
 
 
-@sentry_monitored_service
 def remove_booking_package(db: Session, booking_id: int, package_id: int) -> bool:
     """
     Remove a package from a booking
@@ -583,7 +569,6 @@ def remove_booking_package(db: Session, booking_id: int, package_id: int) -> boo
     return True
 
 
-@sentry_monitored_service
 def add_booking_addon(db: Session, booking_id: int, addon_data: BookingAddonCreate) -> BookingAddon:
     """
     Add an addon to a booking
@@ -621,7 +606,6 @@ def add_booking_addon(db: Session, booking_id: int, addon_data: BookingAddonCrea
     return db_booking_addon
 
 
-@sentry_monitored_service
 def remove_booking_addon(db: Session, booking_id: int, addon_id: int) -> bool:
     """
     Remove an addon from a booking
@@ -661,7 +645,6 @@ def remove_booking_addon(db: Session, booking_id: int, addon_id: int) -> bool:
     return True
 
 
-@sentry_monitored_service
 def get_booking_details(db: Session, booking_id: int) -> Dict[str, Any]:
     """
     Get booking details with financial information

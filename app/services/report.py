@@ -16,10 +16,6 @@ from app.models.villa import Villa, VillaAvailability
 from app.schemas.report import (
     ReportVillaOccupancyParams, ReportBookingStatusParams, ReportRevenueParams
 )
-from app.utils.sentry import sentry_monitored_service
-
-
-@sentry_monitored_service
 def get_villa_occupancy_report(db: Session, params: ReportVillaOccupancyParams) -> Dict[str, Any]:
     """
     Generate villa occupancy report
@@ -120,7 +116,6 @@ def get_villa_occupancy_report(db: Session, params: ReportVillaOccupancyParams) 
     return result
 
 
-@sentry_monitored_service
 def get_booking_status_report(db: Session, params: ReportBookingStatusParams) -> Dict[str, Any]:
     """
     Generate booking status report
@@ -174,7 +169,6 @@ def get_booking_status_report(db: Session, params: ReportBookingStatusParams) ->
     return result
 
 
-@sentry_monitored_service
 def get_revenue_report(db: Session, params: ReportRevenueParams) -> Dict[str, Any]:
     """
     Generate revenue report
@@ -265,7 +259,6 @@ def get_revenue_report(db: Session, params: ReportRevenueParams) -> Dict[str, An
     return result
 
 
-@sentry_monitored_service
 def _group_payments_by_day(payments: List[Any]) -> Dict[str, List[Any]]:
     """Group payments by day"""
     grouped = defaultdict(list)
@@ -275,7 +268,6 @@ def _group_payments_by_day(payments: List[Any]) -> Dict[str, List[Any]]:
     return grouped
 
 
-@sentry_monitored_service
 def _group_payments_by_week(payments: List[Any]) -> Dict[str, List[Any]]:
     """Group payments by week"""
     grouped = defaultdict(list)
@@ -286,7 +278,6 @@ def _group_payments_by_week(payments: List[Any]) -> Dict[str, List[Any]]:
     return grouped
 
 
-@sentry_monitored_service
 def _group_payments_by_month(payments: List[Any]) -> Dict[str, List[Any]]:
     """Group payments by month"""
     grouped = defaultdict(list)
@@ -296,7 +287,6 @@ def _group_payments_by_month(payments: List[Any]) -> Dict[str, List[Any]]:
     return grouped
 
 
-@sentry_monitored_service
 def _group_payments_by_year(payments: List[Any]) -> Dict[str, List[Any]]:
     """Group payments by year"""
     grouped = defaultdict(list)
@@ -306,7 +296,6 @@ def _group_payments_by_year(payments: List[Any]) -> Dict[str, List[Any]]:
     return grouped
 
 
-@sentry_monitored_service
 def _group_payments_by_villa(db: Session, payments: List[Any]) -> Dict[str, List[Any]]:
     """Group payments by villa"""
     # Get booking to villa mapping
@@ -336,7 +325,6 @@ def _group_payments_by_villa(db: Session, payments: List[Any]) -> Dict[str, List
     return grouped
 
 
-@sentry_monitored_service
 def get_top_villas_report(db: Session, start_date: date, end_date: date, limit: int = 5) -> Dict[str, Any]:
     """
     Generate top villas report
@@ -432,7 +420,6 @@ def get_top_villas_report(db: Session, start_date: date, end_date: date, limit: 
     return result
 
 
-@sentry_monitored_service
 def get_dashboard_summary(db: Session) -> Dict[str, Any]:
     """
     Generate dashboard summary
