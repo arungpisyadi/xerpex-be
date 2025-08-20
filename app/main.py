@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
-from app.controllers import auth, user, villa, booking, payment, report, salesmen, survey
+from app.controllers import auth, user, villa, booking, payment, report, salesmen, survey, package
 from app.controllers import settings as app_settings
 from app.utils.sentry import (
     capture_exception,
@@ -94,6 +94,7 @@ app.include_router(payment.router, prefix=settings.API_V1_STR)
 app.include_router(report.router, prefix=settings.API_V1_STR)
 app.include_router(salesmen.router, prefix=settings.API_V1_STR)
 app.include_router(survey.router, prefix=settings.API_V1_STR)
+app.include_router(package.router, prefix=settings.API_V1_STR)
 app.include_router(app_settings.router, prefix=settings.API_V1_STR)
 
 

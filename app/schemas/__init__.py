@@ -35,3 +35,6 @@ from app.schemas.survey import (
     SurveyStatus, SurveyPriority, SurveyBase, SurveyCreate, SurveyUpdate, SurveyStatusUpdate,
     SurveyInDB, Survey, SurveyWithSalesman, SurveyStats, SalesmanStats
 )
+from app.schemas.package import (
+    PackageBase, PackageCreate, PackageUpdate, Package
+)

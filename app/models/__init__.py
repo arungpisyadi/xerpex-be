@@ -8,6 +8,7 @@ from app.models.booking import Booking, BookingVilla, BookingPackage, BookingAdd
 from app.models.payment import Payment, Invoice, InvoiceItem
 from app.models.salesmen import Salesmen
 from app.models.survey import Survey
+from app.models.package import Package
 
 # For Alembic to detect all models
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     "Invoice",
     "InvoiceItem",
     "Salesmen",
-    "Survey"
+    "Survey",
+    "Package"
 ]
