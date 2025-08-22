@@ -10,6 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.controllers import auth, user, villa, booking, payment, report, salesmen, survey, package
+from app.controllers import customer, tax, quote, invoice
 from app.controllers import settings as app_settings
 from app.utils.sentry import (
     capture_exception,
@@ -34,9 +35,9 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
-# Set up CORS middleware only for localhost/development environment
+# Set up CORS middleware for development environments
 # In production, CORS is handled by Nginx
-if settings.SENTRY_ENVIRONMENT in ["localhost"]:
+if settings.SENTRY_ENVIRONMENT in ["localhost", "development"]:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.BACKEND_CORS_ORIGINS,
@@ -96,6 +97,12 @@ app.include_router(salesmen.router, prefix=settings.API_V1_STR)
 app.include_router(survey.router, prefix=settings.API_V1_STR)
 app.include_router(package.router, prefix=settings.API_V1_STR)
 app.include_router(app_settings.router, prefix=settings.API_V1_STR)
+
+# Include new invoicing system routers
+app.include_router(customer.router, prefix=settings.API_V1_STR)
+app.include_router(tax.router, prefix=settings.API_V1_STR)
+app.include_router(quote.router, prefix=settings.API_V1_STR)
+app.include_router(invoice.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

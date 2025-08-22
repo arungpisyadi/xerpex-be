@@ -212,3 +212,32 @@ def get_current_admin_user(current_user: User = Depends(get_current_active_user)
             detail="Not enough permissions"
         )
     return current_user
+
+
+def should_apply_user_isolation(user: User) -> bool:
+    """
+    Check if user isolation should be applied based on user role
+    
+    Args:
+        user: Current user
+        
+    Returns:
+        bool: True if user isolation should be applied, False for admin/finance roles
+    """
+    return user.role not in ["admin", "finance"]
+
+
+def get_user_filter_condition(user: User, model_user_id_field):
+    """
+    Get the appropriate filter condition based on user role
+    
+    Args:
+        user: Current user
+        model_user_id_field: The user_id field of the model (e.g., Customer.user_id)
+        
+    Returns:
+        SQLAlchemy condition or True (no filter for admin/finance)
+    """
+    if should_apply_user_isolation(user):
+        return model_user_id_field == user.id
+    return True  # No filter for admin/finance roles

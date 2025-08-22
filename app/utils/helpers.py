@@ -37,6 +37,21 @@ def generate_invoice_number(prefix: str = "INV") -> str:
     return f"{prefix}{timestamp}{random_chars}"
 
 
+def generate_quote_number(prefix: str = "QUO") -> str:
+    """
+    Generate a unique quote number
+    
+    Args:
+        prefix: Quote number prefix
+        
+    Returns:
+        str: Unique quote number
+    """
+    timestamp = datetime.now().strftime("%y%m%d")
+    random_chars = ''.join(random.choices(string.digits, k=4))
+    return f"{prefix}{timestamp}{random_chars}"
+
+
 def is_date_range_available(
     check_in: date,
     check_out: date,

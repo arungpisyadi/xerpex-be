@@ -9,6 +9,9 @@ from app.models.payment import Payment, Invoice, InvoiceItem
 from app.models.salesmen import Salesmen
 from app.models.survey import Survey
 from app.models.package import Package
+from app.models.customer import Customer
+from app.models.tax import Tax
+from app.models.quote import Quote, QuoteItem
 
 # For Alembic to detect all models
 __all__ = [
@@ -26,5 +29,9 @@ __all__ = [
     "InvoiceItem",
     "Salesmen",
     "Survey",
-    "Package"
+    "Package",
+    "Customer",
+    "Tax",
+    "Quote",
+    "QuoteItem"
 ]

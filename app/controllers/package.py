@@ -13,7 +13,7 @@ from app.services.package import (
     get_package, get_packages, create_package, update_package, delete_package,
     get_package_categories, get_package_types
 )
-from app.utils.security import get_current_active_user
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/packages", tags=["packages"])
 
@@ -27,10 +27,11 @@ async def read_packages(
     min_cost: Optional[float] = Query(None, description="Filter by minimum cost per pax"),
     max_cost: Optional[float] = Query(None, description="Filter by maximum cost per pax"),
     search: Optional[str] = Query(None, description="Search by name"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Get all packages with optional filtering and search
+    Get all packages with optional filtering and search (user isolated)
     
     Args:
         skip: Number of records to skip
@@ -41,14 +42,16 @@ async def read_packages(
         max_cost: Filter by maximum cost per pax
         search: Search by name (partial match)
         db: Database session
+        current_user: Current user for isolation
         
     Returns:
         List[Package]: List of packages
     """
     packages = get_packages(
-        db, 
-        skip=skip, 
-        limit=limit, 
+        db,
+        user_id=current_user.id,
+        skip=skip,
+        limit=limit,
         category=category,
         type=type,
         min_cost=min_cost,
@@ -62,10 +65,10 @@ async def read_packages(
 async def create_new_package(
     package: PackageCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Create a new package
+    Create a new package with user isolation
     
     Args:
         package: Package data
@@ -74,31 +77,23 @@ async def create_new_package(
         
     Returns:
         Package: Created package
-        
-    Raises:
-        HTTPException: If not enough permissions
     """
-    # Only admin and manager can create packages
-    if current_user.role not in ["admin", "manager"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-    
-    return create_package(db=db, package=package)
+    return create_package(db=db, package=package, user_id=current_user.id)
 
 
 @router.get("/{package_id}", response_model=Package)
 async def read_package(
     package_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Get a package by ID
+    Get a package by ID with user isolation
     
     Args:
         package_id: Package ID
         db: Database session
+        current_user: Current user for isolation
         
     Returns:
         Package: Package
@@ -106,7 +101,7 @@ async def read_package(
     Raises:
         HTTPException: If package not found
     """
-    db_package = get_package(db, package_id=package_id)
+    db_package = get_package(db, package_id=package_id, user_id=current_user.id)
     if db_package is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -121,10 +116,10 @@ async def update_package_endpoint(
     package_id: int,
     package_update: PackageUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Update a package
+    Update a package with user isolation
     
     Args:
         package_id: Package ID
@@ -136,26 +131,19 @@ async def update_package_endpoint(
         Package: Updated package
         
     Raises:
-        HTTPException: If package not found or not enough permissions
+        HTTPException: If package not found
     """
-    # Only admin and manager can update packages
-    if current_user.role not in ["admin", "manager"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-    
-    return update_package(db=db, package_id=package_id, package_update=package_update)
+    return update_package(db=db, package_id=package_id, package_update=package_update, user_id=current_user.id)
 
 
 @router.delete("/{package_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_package_endpoint(
     package_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Delete a package
+    Delete a package with user isolation
     
     Args:
         package_id: Package ID
@@ -163,46 +151,43 @@ async def delete_package_endpoint(
         current_user: Current user
         
     Raises:
-        HTTPException: If package not found or not enough permissions
+        HTTPException: If package not found
     """
-    # Only admin and manager can delete packages
-    if current_user.role not in ["admin", "manager"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-    
-    delete_package(db=db, package_id=package_id)
+    delete_package(db=db, package_id=package_id, user_id=current_user.id)
     return None
 
 
 @router.get("/meta/categories", response_model=List[str])
 async def get_categories(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Get all unique package categories
+    Get all unique package categories with user isolation
     
     Args:
         db: Database session
+        current_user: Current user for isolation
         
     Returns:
         List[str]: List of unique categories
     """
-    return get_package_categories(db)
+    return get_package_categories(db, user_id=current_user.id)
 
 
 @router.get("/meta/types", response_model=List[str])
 async def get_types(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Get all unique package types
+    Get all unique package types with user isolation
     
     Args:
         db: Database session
+        current_user: Current user for isolation
         
     Returns:
         List[str]: List of unique types
     """
-    return get_package_types(db)
+    return get_package_types(db, user_id=current_user.id)

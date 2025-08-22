@@ -27,7 +27,14 @@ class User(Base):
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
     created_bookings = relationship("Booking", foreign_keys="Booking.created_by", back_populates="creator")
     updated_availabilities = relationship("VillaAvailability", back_populates="updated_by_user")
-    recorded_payments = relationship("Payment", back_populates="recorded_by_user")
+    
+    # Invoicing system relationships
+    customers = relationship("Customer", back_populates="user", cascade="all, delete-orphan")
+    taxes = relationship("Tax", back_populates="user", cascade="all, delete-orphan")
+    quotes = relationship("Quote", back_populates="user", cascade="all, delete-orphan")
+    invoices = relationship("Invoice", back_populates="user", cascade="all, delete-orphan")
+    payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
+    packages = relationship("Package", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserActivity(Base):

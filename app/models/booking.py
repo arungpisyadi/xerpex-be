@@ -30,8 +30,6 @@ class Booking(Base):
     villas = relationship("BookingVilla", back_populates="booking", cascade="all, delete-orphan")
     packages = relationship("BookingPackage", back_populates="booking", cascade="all, delete-orphan")
     addons = relationship("BookingAddon", back_populates="booking", cascade="all, delete-orphan")
-    payments = relationship("Payment", back_populates="booking", cascade="all, delete-orphan")
-    invoices = relationship("Invoice", back_populates="booking", cascade="all, delete-orphan")
     creator = relationship("User", foreign_keys=[created_by], back_populates="created_bookings")
 
 

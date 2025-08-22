@@ -13,23 +13,28 @@ from app.models.package import Package
 from app.schemas.package import PackageCreate, PackageUpdate
 
 
-def get_package(db: Session, package_id: int) -> Optional[Package]:
+def get_package(db: Session, package_id: int, user_id: Optional[int] = None) -> Optional[Package]:
     """
-    Get a package by ID
+    Get a package by ID with optional user isolation
     
     Args:
         db: Database session
         package_id: Package ID
+        user_id: Optional user ID for isolation
         
     Returns:
         Package: Package or None
     """
-    return db.query(Package).filter(Package.id == package_id).first()
+    query = db.query(Package).filter(Package.id == package_id)
+    if user_id is not None:
+        query = query.filter(Package.user_id == user_id)
+    return query.first()
 
 
 def get_packages(
-    db: Session, 
-    skip: int = 0, 
+    db: Session,
+    user_id: Optional[int] = None,
+    skip: int = 0,
     limit: int = 100,
     category: Optional[str] = None,
     type: Optional[str] = None,
@@ -42,6 +47,7 @@ def get_packages(
     
     Args:
         db: Database session
+        user_id: Optional user ID for isolation
         skip: Number of records to skip
         limit: Maximum number of records to return
         category: Filter by category
@@ -54,6 +60,10 @@ def get_packages(
         List[Package]: List of packages
     """
     query = db.query(Package)
+    
+    # Apply user isolation if provided
+    if user_id is not None:
+        query = query.filter(Package.user_id == user_id)
     
     # Apply filters
     if category:
@@ -74,18 +84,20 @@ def get_packages(
     return query.offset(skip).limit(limit).all()
 
 
-def create_package(db: Session, package: PackageCreate) -> Package:
+def create_package(db: Session, package: PackageCreate, user_id: int) -> Package:
     """
-    Create a new package
+    Create a new package with user isolation
     
     Args:
         db: Database session
         package: Package data
+        user_id: User ID for isolation
         
     Returns:
         Package: Created package
     """
     db_package = Package(
+        user_id=user_id,
         name=package.name,
         category=package.category,
         type=package.type,
@@ -104,14 +116,15 @@ def create_package(db: Session, package: PackageCreate) -> Package:
     return db_package
 
 
-def update_package(db: Session, package_id: int, package_update: PackageUpdate) -> Package:
+def update_package(db: Session, package_id: int, package_update: PackageUpdate, user_id: int) -> Package:
     """
-    Update a package
+    Update a package with user isolation
     
     Args:
         db: Database session
         package_id: Package ID
         package_update: Package update data
+        user_id: User ID for isolation
         
     Returns:
         Package: Updated package
@@ -119,7 +132,7 @@ def update_package(db: Session, package_id: int, package_update: PackageUpdate) 
     Raises:
         HTTPException: If package not found
     """
-    db_package = get_package(db, package_id)
+    db_package = get_package(db, package_id, user_id)
     if not db_package:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -139,13 +152,14 @@ def update_package(db: Session, package_id: int, package_update: PackageUpdate) 
     return db_package
 
 
-def delete_package(db: Session, package_id: int) -> bool:
+def delete_package(db: Session, package_id: int, user_id: int) -> bool:
     """
-    Delete a package
+    Delete a package with user isolation
     
     Args:
         db: Database session
         package_id: Package ID
+        user_id: User ID for isolation
         
     Returns:
         bool: True if package was deleted
@@ -153,7 +167,7 @@ def delete_package(db: Session, package_id: int) -> bool:
     Raises:
         HTTPException: If package not found
     """
-    db_package = get_package(db, package_id)
+    db_package = get_package(db, package_id, user_id)
     if not db_package:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -166,29 +180,37 @@ def delete_package(db: Session, package_id: int) -> bool:
     return True
 
 
-def get_package_categories(db: Session) -> List[str]:
+def get_package_categories(db: Session, user_id: Optional[int] = None) -> List[str]:
     """
-    Get all unique package categories
+    Get all unique package categories with optional user isolation
     
     Args:
         db: Database session
+        user_id: Optional user ID for isolation
         
     Returns:
         List[str]: List of unique categories
     """
-    categories = db.query(Package.category).filter(Package.category.isnot(None)).distinct().all()
+    query = db.query(Package.category).filter(Package.category.isnot(None))
+    if user_id is not None:
+        query = query.filter(Package.user_id == user_id)
+    categories = query.distinct().all()
     return [category[0] for category in categories]
 
 
-def get_package_types(db: Session) -> List[str]:
+def get_package_types(db: Session, user_id: Optional[int] = None) -> List[str]:
     """
-    Get all unique package types
+    Get all unique package types with optional user isolation
     
     Args:
         db: Database session
+        user_id: Optional user ID for isolation
         
     Returns:
         List[str]: List of unique types
     """
-    types = db.query(Package.type).filter(Package.type.isnot(None)).distinct().all()
+    query = db.query(Package.type).filter(Package.type.isnot(None))
+    if user_id is not None:
+        query = query.filter(Package.user_id == user_id)
+    types = query.distinct().all()
     return [type_[0] for type_ in types]
