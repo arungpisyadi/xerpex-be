@@ -16,6 +16,8 @@ class Customer(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     email = Column(String(100), nullable=True)
+    phone_number = Column(String(20), nullable=True)
+    address = Column(Text, nullable=True)
     billing_address = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.schemas.customer import (
-    CustomerCreate, CustomerUpdate, Customer
+    CustomerCreate, CustomerUpdate, Customer, CustomerResponse
 )
 from app.services.customer import (
     get_customer, get_customers, create_customer, update_customer,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 async def list_customers(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    search: Optional[str] = Query(None, description="Search by name, email, or phone"),
+    search: Optional[str] = Query(None, description="Search by name, email, phone, or address"),
     active_only: bool = Query(True, description="Filter only active customers"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -82,7 +82,7 @@ async def get_customer_statistics_endpoint(
     return {"total_customers": count}
 
 
-@router.post("/", response_model=Customer, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
 async def create_customer_endpoint(
     customer: CustomerCreate,
     db: Session = Depends(get_db),
@@ -105,7 +105,7 @@ async def create_customer_endpoint(
         )
 
 
-@router.get("/{customer_id}", response_model=Customer)
+@router.get("/{customer_id}", response_model=CustomerResponse)
 async def get_customer_endpoint(
     customer_id: int,
     db: Session = Depends(get_db),
@@ -123,7 +123,7 @@ async def get_customer_endpoint(
     return customer
 
 
-@router.put("/{customer_id}", response_model=Customer)
+@router.put("/{customer_id}", response_model=CustomerResponse)
 async def update_customer_endpoint(
     customer_id: int,
     customer_update: CustomerUpdate,

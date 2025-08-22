@@ -68,7 +68,9 @@ def get_customers(
         query = query.filter(
             or_(
                 Customer.name.ilike(f"%{search}%"),
-                Customer.email.ilike(f"%{search}%")
+                Customer.email.ilike(f"%{search}%"),
+                Customer.phone_number.ilike(f"%{search}%"),
+                Customer.address.ilike(f"%{search}%")
             )
         )
     
@@ -103,11 +105,18 @@ def create_customer(db: Session, customer: CustomerCreate, current_user: User) -
                 detail="Customer with this email already exists"
             )
     
+    # Implement billing address fallback logic
+    billing_address = customer.billing_address
+    if not billing_address or billing_address.strip() == "":
+        billing_address = customer.address
+    
     db_customer = Customer(
         user_id=current_user.id,
         name=customer.name,
         email=customer.email,
-        billing_address=customer.billing_address,
+        phone_number=customer.phone_number,
+        address=customer.address,
+        billing_address=billing_address,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -170,6 +179,16 @@ def update_customer(
     
     # Update customer fields
     update_data = customer_update.dict(exclude_unset=True)
+    
+    # Implement billing address fallback logic for updates
+    if 'billing_address' in update_data or 'address' in update_data:
+        # Get the new billing_address value (either from update or current)
+        new_billing_address = update_data.get('billing_address', db_customer.billing_address)
+        new_address = update_data.get('address', db_customer.address)
+        
+        # Apply fallback logic: if billing_address is empty/None, use address
+        if not new_billing_address or new_billing_address.strip() == "":
+            update_data['billing_address'] = new_address
     
     for key, value in update_data.items():
         setattr(db_customer, key, value)

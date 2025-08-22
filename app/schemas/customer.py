@@ -3,26 +3,47 @@ Customer schemas for the XerpeX ERP System
 """
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+
+from app.utils.helpers import sanitize_phone_number
 
 
 class CustomerBase(BaseModel):
     """Base customer schema"""
     name: str
     email: Optional[EmailStr] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
     billing_address: Optional[str] = None
 
 
 class CustomerCreate(CustomerBase):
     """Customer creation schema"""
-    pass
+    
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v: Optional[str]) -> Optional[str]:
+        """Sanitize phone number using helper function"""
+        if v is None:
+            return v
+        return sanitize_phone_number(v)
 
 
 class CustomerUpdate(BaseModel):
     """Customer update schema"""
     name: Optional[str] = None
     email: Optional[EmailStr] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
     billing_address: Optional[str] = None
+    
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v: Optional[str]) -> Optional[str]:
+        """Sanitize phone number using helper function"""
+        if v is None:
+            return v
+        return sanitize_phone_number(v)
 
 
 class CustomerInDB(CustomerBase):
@@ -37,8 +58,13 @@ class CustomerInDB(CustomerBase):
         from_attributes = True
 
 
+class CustomerResponse(CustomerInDB):
+    """Customer response schema for API responses"""
+    pass
+
+
 class Customer(CustomerInDB):
-    """Customer schema for API responses"""
+    """Customer schema for API responses (backward compatibility)"""
     pass
 
 
