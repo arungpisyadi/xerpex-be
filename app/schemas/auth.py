@@ -2,7 +2,7 @@
 Authentication schemas for the XerpeX ERP System
 """
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 
 
 class Token(BaseModel):
@@ -18,8 +18,26 @@ class TokenPayload(BaseModel):
 
 class UserLogin(BaseModel):
     """User login schema"""
-    email: EmailStr
+    email: Optional[EmailStr] = None
+    username: Optional[EmailStr] = None
     password: str
+    
+    @model_validator(mode='before')
+    @classmethod
+    def validate_email_or_username(cls, values):
+        """Custom validation to ensure either email or username is provided"""
+        if isinstance(values, dict):
+            email = values.get('email')
+            username = values.get('username')
+            
+            if not email and not username:
+                raise ValueError('Either email or username must be provided')
+            
+            # If username is provided but not email, use username as email
+            if username and not email:
+                values['email'] = username
+                
+        return values
 
 
 class UserCreate(BaseModel):
