@@ -2,7 +2,9 @@
 Settings schemas for the XerpeX ERP System
 """
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+
+from app.utils.helpers import sanitize_phone_number
 
 
 class GeneralSettingsBase(BaseModel):
@@ -21,7 +23,11 @@ class GeneralSettingsBase(BaseModel):
 
 class GeneralSettingsCreate(GeneralSettingsBase):
     """General settings creation schema"""
-    pass
+    
+    @field_validator('company_phone')
+    @classmethod
+    def validate_phone_number(cls, v):
+        return sanitize_phone_number(v)
 
 
 class GeneralSettingsUpdate(BaseModel):
@@ -36,6 +42,11 @@ class GeneralSettingsUpdate(BaseModel):
     bank_account_holder_name: str | None = None
     bank_name: str | None = None
     bank_swift_number: str | None = None
+    
+    @field_validator('company_phone')
+    @classmethod
+    def validate_phone_number(cls, v):
+        return sanitize_phone_number(v)
 
 
 class GeneralSettings(GeneralSettingsBase):

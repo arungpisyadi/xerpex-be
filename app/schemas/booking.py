@@ -3,7 +3,9 @@ Booking schemas for the XerpeX ERP System
 """
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, condecimal, Field
+from pydantic import BaseModel, EmailStr, condecimal, Field, field_validator
+
+from app.utils.helpers import sanitize_phone_number
 
 
 class BookingVillaBase(BaseModel):
@@ -87,6 +89,11 @@ class BookingCreate(BookingBase):
     villas: List[BookingVillaCreate]
     packages: Optional[List[BookingPackageCreate]] = None
     addons: Optional[List[BookingAddonCreate]] = None
+    
+    @field_validator('guest_phone')
+    @classmethod
+    def validate_phone_number(cls, v):
+        return sanitize_phone_number(v)
 
 
 class BookingUpdate(BaseModel):
@@ -99,6 +106,11 @@ class BookingUpdate(BaseModel):
     total_pax: Optional[int] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    
+    @field_validator('guest_phone')
+    @classmethod
+    def validate_phone_number(cls, v):
+        return sanitize_phone_number(v)
 
 
 class BookingStatusUpdate(BaseModel):

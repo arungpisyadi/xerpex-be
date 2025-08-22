@@ -601,3 +601,47 @@ def test_get_dashboard_summary(db: Session, test_user):
     assert "top_villas" in summary
     assert "recent_bookings" in summary
     assert "revenue_chart" in summary
+
+
+# Phone sanitization service tests
+def test_booking_service_phone_sanitization(db: Session, test_user):
+    """Test phone number sanitization in booking service"""
+    from app.tests.utils import create_test_villa
+    
+    # Create villa
+    villa = create_test_villa(db)
+    
+    # Create booking data with unsanitized phone
+    booking_data = BookingCreate(
+        guest_name="Phone Test Guest",
+        guest_email="phonetest@example.com",
+        guest_phone="0812-3456-7890",  # Should be sanitized to 6281234567890
+        check_in=date.today() + timedelta(days=1),
+        check_out=date.today() + timedelta(days=3),
+        total_pax=2,
+        notes="Phone sanitization test",
+        villas=[BookingVillaCreate(villa_id=villa.id)],
+        packages=[],
+        addons=[]
+    )
+    
+    booking = create_booking(db, booking_data, test_user["id"])
+    
+    # Verify phone number was sanitized
+    assert booking.guest_phone == "6281234567890"
+    
+    # Test with different phone formats
+    test_cases = [
+        ("+62 812 3456 7890", "6281234567890"),
+        ("+62-812-345-6789", "62812345678"),
+        ("62812345678", "62812345678"),
+        (None, None),
+    ]
+    
+    for input_phone, expected_phone in test_cases:
+        booking_data.guest_phone = input_phone
+        booking_data.guest_name = f"Test Guest {input_phone or 'None'}"
+        booking_data.guest_email = f"test{hash(input_phone or 'none')}@example.com"
+        
+        booking = create_booking(db, booking_data, test_user["id"])
+        assert booking.guest_phone == expected_phone

@@ -3,7 +3,9 @@ Salesmen schemas for the XerpeX ERP System
 """
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+
+from app.utils.helpers import sanitize_phone_number
 
 
 class SalesmenBase(BaseModel):
@@ -17,7 +19,11 @@ class SalesmenBase(BaseModel):
 
 class SalesmenCreate(SalesmenBase):
     """Salesmen creation schema"""
-    pass
+    
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v):
+        return sanitize_phone_number(v)
 
 
 class SalesmenUpdate(BaseModel):
@@ -27,6 +33,11 @@ class SalesmenUpdate(BaseModel):
     email: Optional[EmailStr] = None
     phone_number: Optional[str] = None
     is_active: Optional[bool] = None
+    
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v):
+        return sanitize_phone_number(v)
 
 
 class SalesmenInDB(SalesmenBase):
