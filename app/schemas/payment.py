@@ -219,5 +219,92 @@ class CustomerInvoiceSummary(BaseModel):
     last_payment_date: Optional[date] = None
 
 
+class InvoiceListResponse(BaseModel):
+    """Response schema for invoice list endpoint"""
+    invoices: List[InvoiceResponse]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        from_attributes = True
+
+
+class PaymentListResponse(BaseModel):
+    """Response schema for payment list endpoint"""
+    payments: List[PaymentResponse]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        from_attributes = True
+
+
+class OverdueInvoicesResponse(BaseModel):
+    """Response schema for overdue invoices endpoint"""
+    overdue_invoices: List[InvoiceResponse]
+    count: int
+
+    class Config:
+        from_attributes = True
+
+
+class OverdueInvoicesCheckResponse(BaseModel):
+    """Response schema for overdue invoices check endpoint"""
+    overdue_count: int
+    overdue_invoices: List[InvoiceResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class InvoicePaymentsResponse(BaseModel):
+    """Response schema for invoice payments endpoint"""
+    invoice_id: int
+    payments: List[PaymentResponse]
+    payment_summary: dict
+
+    class Config:
+        from_attributes = True
+
+
+class PaymentReceiptResponse(BaseModel):
+    """Response schema for payment receipt endpoint"""
+    payment: PaymentResponse
+    invoice: Optional[InvoiceResponse] = None
+    customer: Optional[dict] = None
+    company_info: dict
+    formatted_payment_date: str
+    formatted_amount: str
+    payment_method_display: str
+    status_display: str
+
+    class Config:
+        from_attributes = True
+
+
+class PaymentMethodsResponse(BaseModel):
+    """Response schema for payment methods endpoint"""
+    payment_methods: List[dict]
+
+    class Config:
+        from_attributes = True
+
+
+class InvoicePreviewResponse(BaseModel):
+    """Response schema for invoice preview endpoint"""
+    invoice: InvoiceResponse
+    company_info: dict
+    payment_summary: dict
+    formatted_issue_date: str
+    formatted_due_date: str
+    status_display: str
+    is_overdue: bool
+
+    class Config:
+        from_attributes = True
+
+
 # Update forward references
 InvoiceResponse.model_rebuild()

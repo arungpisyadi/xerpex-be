@@ -10,7 +10,8 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.payment import (
     PaymentCreate, PaymentUpdate, PaymentStatusUpdate, PaymentResponse,
-    PaymentStatus, PaymentMethod
+    PaymentStatus, PaymentMethod, PaymentListResponse, InvoicePaymentsResponse,
+    PaymentReceiptResponse, PaymentMethodsResponse
 )
 from app.services.payment import (
     get_payment, get_payments, create_payment, update_payment,
@@ -21,7 +22,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
-@router.get("/")
+@router.get("/", response_model=PaymentListResponse)
 async def list_payments(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -69,7 +70,7 @@ async def list_payments(
     }
 
 
-@router.get("/statistics")
+@router.get("/statistics", response_model=dict)
 async def get_payment_statistics_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -81,7 +82,7 @@ async def get_payment_statistics_endpoint(
     return stats
 
 
-@router.get("/methods")
+@router.get("/methods", response_model=PaymentMethodsResponse)
 async def get_payment_methods():
     """
     Get available payment methods
@@ -282,7 +283,7 @@ async def refund_payment(
         )
 
 
-@router.get("/invoice/{invoice_id}")
+@router.get("/invoice/{invoice_id}", response_model=InvoicePaymentsResponse)
 async def get_invoice_payments(
     invoice_id: int,
     db: Session = Depends(get_db),
@@ -324,7 +325,7 @@ async def get_invoice_payments(
     }
 
 
-@router.get("/{payment_id}/receipt")
+@router.get("/{payment_id}/receipt", response_model=PaymentReceiptResponse)
 async def get_payment_receipt(
     payment_id: int,
     db: Session = Depends(get_db),

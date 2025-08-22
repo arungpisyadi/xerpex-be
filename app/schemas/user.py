@@ -73,3 +73,20 @@ class UserActivity(UserActivityBase):
 class UserWithActivities(User):
     """User with activities schema"""
     activities: List[UserActivity] = []
+
+
+class UserListResponse(BaseModel):
+    """Response schema for user list endpoint"""
+    users: List[User]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class UserResponse(User):
+    """User response schema for API responses"""
+    pass

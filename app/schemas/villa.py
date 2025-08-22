@@ -89,3 +89,20 @@ class AvailabilityResponse(BaseModel):
     is_available: bool
     villa_id: Optional[int] = None
     unavailable_dates: Optional[List[date]] = None
+
+
+class VillaListResponse(BaseModel):
+    """Response schema for villa list endpoint"""
+    villas: List[Villa]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class VillaResponse(Villa):
+    """Villa response schema for API responses"""
+    pass

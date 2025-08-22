@@ -117,6 +117,7 @@ def create_customer(db: Session, customer: CustomerCreate, current_user: User) -
         phone_number=customer.phone_number,
         address=customer.address,
         billing_address=billing_address,
+        status=customer.status if customer.status is not None else 1,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -277,3 +278,63 @@ def search_customers_by_name(db: Session, name: str, current_user: User, limit: 
         query = query.filter(user_filter)
     
     return query.limit(limit).all()
+
+
+def activate_customer(db: Session, customer_id: int, current_user: User) -> Customer:
+    """
+    Activate a customer (set status to 1)
+    
+    Args:
+        db: Database session
+        customer_id: Customer ID
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        Customer: Updated customer
+        
+    Raises:
+        HTTPException: If customer not found
+    """
+    db_customer = get_customer(db, customer_id, current_user)
+    if not db_customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found"
+        )
+    
+    db_customer.status = 1
+    db_customer.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_customer)
+    
+    return db_customer
+
+
+def deactivate_customer(db: Session, customer_id: int, current_user: User) -> Customer:
+    """
+    Deactivate a customer (set status to 0)
+    
+    Args:
+        db: Database session
+        customer_id: Customer ID
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        Customer: Updated customer
+        
+    Raises:
+        HTTPException: If customer not found
+    """
+    db_customer = get_customer(db, customer_id, current_user)
+    if not db_customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found"
+        )
+    
+    db_customer.status = 0
+    db_customer.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_customer)
+    
+    return db_customer

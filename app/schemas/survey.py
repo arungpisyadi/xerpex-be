@@ -117,3 +117,20 @@ class SalesmanStats(BaseModel):
     by_status: dict
     conversion_rate: float
     avg_days_to_close: Optional[float] = None
+
+
+class SurveyListResponse(BaseModel):
+    """Response schema for survey list endpoint"""
+    surveys: List[Survey]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class SurveyResponse(Survey):
+    """Survey response schema for API responses"""
+    pass

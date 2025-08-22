@@ -10,7 +10,9 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.quote import (
     QuoteCreate, QuoteUpdate, QuoteStatusUpdate, Quote,
-    QuoteStatus, QuoteConversionRequest
+    QuoteStatus, QuoteConversionRequest, QuoteListResponse,
+    QuoteCalculationResponse, ExpiredQuotesResponse,
+    QuoteConversionResponse, QuotePreviewResponse
 )
 from app.services.quote import (
     get_quote, get_quotes, create_quote, update_quote, update_quote_status,
@@ -22,7 +24,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/quotes", tags=["quotes"])
 
 
-@router.get("/")
+@router.get("/", response_model=QuoteListResponse)
 async def list_quotes(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -70,7 +72,7 @@ async def list_quotes(
     }
 
 
-@router.get("/statistics")
+@router.get("/statistics", response_model=dict)
 async def get_quote_statistics_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -82,7 +84,7 @@ async def get_quote_statistics_endpoint(
     return stats
 
 
-@router.post("/calculate-totals")
+@router.post("/calculate-totals", response_model=QuoteCalculationResponse)
 async def calculate_quote_totals_endpoint(
     items: List[dict],
     tax_ids: Optional[List[int]] = None,
@@ -107,7 +109,7 @@ async def calculate_quote_totals_endpoint(
     return result
 
 
-@router.post("/check-expired")
+@router.post("/check-expired", response_model=ExpiredQuotesResponse)
 async def check_expired_quotes_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -339,7 +341,7 @@ async def reopen_quote(
         )
 
 
-@router.post("/{quote_id}/convert-to-invoice")
+@router.post("/{quote_id}/convert-to-invoice", response_model=QuoteConversionResponse)
 async def convert_quote_to_invoice(
     quote_id: int,
     conversion_request: QuoteConversionRequest,
@@ -378,7 +380,7 @@ async def convert_quote_to_invoice(
         )
 
 
-@router.get("/{quote_id}/preview")
+@router.get("/{quote_id}/preview", response_model=QuotePreviewResponse)
 async def preview_quote(
     quote_id: int,
     db: Session = Depends(get_db),

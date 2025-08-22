@@ -51,6 +51,35 @@ class SalesmenInDB(SalesmenBase):
         from_attributes = True
 
 
+class SalesmenListResponse(BaseModel):
+    """Response schema for salesmen list endpoint"""
+    salesmen: List["Salesmen"]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class SalesmenResponse(BaseModel):
+    """Salesmen response schema for API responses"""
+    id: int
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone_number: Optional[str] = None
+    is_active: bool = True
+    full_name: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
 class Salesmen(SalesmenInDB):
     """Salesmen schema"""
     full_name: str

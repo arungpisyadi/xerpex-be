@@ -165,3 +165,15 @@ class BookingPackageResponse(BookingPackage):
 class BookingAddonResponse(BookingAddon):
     """Booking addon response schema for API"""
     pass
+
+
+class BookingListResponse(BaseModel):
+    """Response schema for booking list endpoint"""
+    bookings: List[BookingResponse]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True

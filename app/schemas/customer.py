@@ -2,7 +2,7 @@
 Customer schemas for the XerpeX ERP System
 """
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr, field_validator
 
 from app.utils.helpers import sanitize_phone_number
@@ -15,6 +15,7 @@ class CustomerBase(BaseModel):
     phone_number: Optional[str] = None
     address: Optional[str] = None
     billing_address: Optional[str] = None
+    status: Optional[int] = 1  # 1 = active, 0 = inactive
 
 
 class CustomerCreate(CustomerBase):
@@ -36,6 +37,7 @@ class CustomerUpdate(BaseModel):
     phone_number: Optional[str] = None
     address: Optional[str] = None
     billing_address: Optional[str] = None
+    status: Optional[int] = None
     
     @field_validator('phone_number')
     @classmethod
@@ -80,6 +82,18 @@ class CustomerWithQuotes(Customer):
 class CustomerWithInvoices(Customer):
     """Customer schema with related invoices"""
     invoices: list = []
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class CustomerListResponse(BaseModel):
+    """Response schema for customer list endpoint"""
+    customers: List[CustomerResponse]
+    total: int
+    skip: int
+    limit: int
 
     class Config:
         """Pydantic config"""

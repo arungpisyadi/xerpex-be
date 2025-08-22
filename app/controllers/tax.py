@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.schemas.tax import (
-    TaxCreate, TaxUpdate, Tax
+    TaxCreate, TaxUpdate, Tax, TaxListResponse,
+    TaxStatisticsResponse, TaxCalculationResponse
 )
 from app.services.tax import (
     get_tax, get_taxes, create_tax, update_tax, delete_tax,
@@ -19,7 +20,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/taxes", tags=["taxes"])
 
 
-@router.get("/")
+@router.get("/", response_model=TaxListResponse)
 async def list_taxes(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -49,7 +50,7 @@ async def list_taxes(
     }
 
 
-@router.get("/statistics")
+@router.get("/statistics", response_model=TaxStatisticsResponse)
 async def get_tax_statistics_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -61,7 +62,7 @@ async def get_tax_statistics_endpoint(
     return {"total_taxes": count}
 
 
-@router.post("/calculate")
+@router.post("/calculate", response_model=TaxCalculationResponse)
 async def calculate_taxes(
     calculation_request: dict,
     db: Session = Depends(get_db),

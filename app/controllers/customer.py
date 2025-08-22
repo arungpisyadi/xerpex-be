@@ -8,18 +8,19 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.schemas.customer import (
-    CustomerCreate, CustomerUpdate, Customer, CustomerResponse
+    CustomerCreate, CustomerUpdate, Customer, CustomerResponse, CustomerListResponse
 )
 from app.services.customer import (
     get_customer, get_customers, create_customer, update_customer,
-    delete_customer, get_customer_count, search_customers_by_name
+    delete_customer, get_customer_count, search_customers_by_name,
+    activate_customer, deactivate_customer
 )
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
 
-@router.get("/")
+@router.get("/", response_model=CustomerListResponse)
 async def list_customers(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -169,21 +170,19 @@ async def delete_customer_endpoint(
         )
 
 
-@router.post("/{customer_id}/activate", response_model=Customer)
-async def activate_customer(
+@router.post("/{customer_id}/activate", response_model=CustomerResponse)
+async def activate_customer_endpoint(
     customer_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Activate a customer
+    Activate a customer (set status to 1)
     """
-    customer_update = CustomerUpdate(is_active=True)
     try:
-        updated_customer = update_customer(
+        updated_customer = activate_customer(
             db=db,
             customer_id=customer_id,
-            customer_update=customer_update,
             current_user=current_user
         )
         return updated_customer
@@ -194,21 +193,19 @@ async def activate_customer(
         )
 
 
-@router.post("/{customer_id}/deactivate", response_model=Customer)
-async def deactivate_customer(
+@router.post("/{customer_id}/deactivate", response_model=CustomerResponse)
+async def deactivate_customer_endpoint(
     customer_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Deactivate a customer
+    Deactivate a customer (set status to 0)
     """
-    customer_update = CustomerUpdate(is_active=False)
     try:
-        updated_customer = update_customer(
+        updated_customer = deactivate_customer(
             db=db,
             customer_id=customer_id,
-            customer_update=customer_update,
             current_user=current_user
         )
         return updated_customer

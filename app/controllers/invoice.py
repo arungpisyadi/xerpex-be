@@ -10,7 +10,8 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.payment import (
     InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceResponse,
-    InvoiceStatus, QuoteToInvoiceRequest
+    InvoiceStatus, QuoteToInvoiceRequest, InvoiceListResponse,
+    OverdueInvoicesResponse, OverdueInvoicesCheckResponse, InvoicePreviewResponse
 )
 from app.services.payment import (
     get_invoice, get_invoice_by_number, get_invoices, create_invoice,
@@ -22,7 +23,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
 
-@router.get("/")
+@router.get("/", response_model=InvoiceListResponse)
 async def list_invoices(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -73,7 +74,7 @@ async def list_invoices(
     }
 
 
-@router.get("/statistics")
+@router.get("/statistics", response_model=dict)
 async def get_invoice_statistics_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -85,7 +86,7 @@ async def get_invoice_statistics_endpoint(
     return stats
 
 
-@router.get("/overdue")
+@router.get("/overdue", response_model=OverdueInvoicesResponse)
 async def get_overdue_invoices(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -109,7 +110,7 @@ async def get_overdue_invoices(
     }
 
 
-@router.post("/check-overdue")
+@router.post("/check-overdue", response_model=OverdueInvoicesCheckResponse)
 async def check_overdue_invoices_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -386,7 +387,7 @@ async def reopen_invoice(
         )
 
 
-@router.get("/{invoice_id}/preview")
+@router.get("/{invoice_id}/preview", response_model=InvoicePreviewResponse)
 async def preview_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),

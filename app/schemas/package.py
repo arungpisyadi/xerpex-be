@@ -2,7 +2,7 @@
 Package schemas for the XerpeX ERP System
 """
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, condecimal
 
 
@@ -42,3 +42,20 @@ class Package(PackageBase):
     class Config:
         """Pydantic config"""
         from_attributes = True
+
+
+class PackageListResponse(BaseModel):
+    """Response schema for package list endpoint"""
+    packages: List[Package]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class PackageResponse(Package):
+    """Package response schema for API responses"""
+    pass

@@ -2,7 +2,7 @@
 Customer models for the XerpeX ERP System
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, SmallInteger
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -19,6 +19,7 @@ class Customer(Base):
     phone_number = Column(String(20), nullable=True)
     address = Column(Text, nullable=True)
     billing_address = Column(Text, nullable=True)
+    status = Column(SmallInteger, nullable=False, default=1)  # 1 = active, 0 = inactive
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

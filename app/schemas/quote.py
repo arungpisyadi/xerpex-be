@@ -159,3 +159,61 @@ class QuoteConversionRequest(BaseModel):
         if v is not None and v <= date.today():
             raise ValueError('Due date must be in the future')
         return v
+
+
+class QuoteListResponse(BaseModel):
+    """Response schema for quote list endpoint"""
+    quotes: List[Quote]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class QuoteCalculationResponse(BaseModel):
+    """Response schema for quote calculation endpoint"""
+    subtotal: condecimal(max_digits=10, decimal_places=2)
+    tax_total: condecimal(max_digits=10, decimal_places=2)
+    total: condecimal(max_digits=10, decimal_places=2)
+    taxes_applied: List[dict] = []
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class ExpiredQuotesResponse(BaseModel):
+    """Response schema for expired quotes check endpoint"""
+    expired_count: int
+    expired_quotes: List[Quote]
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class QuoteConversionResponse(BaseModel):
+    """Response schema for quote to invoice conversion"""
+    message: str
+    invoice_id: int
+    invoice_number: str
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class QuotePreviewResponse(BaseModel):
+    """Response schema for quote preview endpoint"""
+    quote: Quote
+    company_info: dict
+    formatted_date: str
+    formatted_expiry: Optional[str] = None
+    status_display: str
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True

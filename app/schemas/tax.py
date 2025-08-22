@@ -2,7 +2,7 @@
 Tax schemas for the XerpeX ERP System
 """
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, condecimal, validator
 
 
@@ -50,3 +50,36 @@ class TaxInDB(TaxBase):
 class Tax(TaxInDB):
     """Tax schema for API responses"""
     pass
+
+
+class TaxListResponse(BaseModel):
+    """Response schema for tax list endpoint"""
+    taxes: List[Tax]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class TaxStatisticsResponse(BaseModel):
+    """Response schema for tax statistics endpoint"""
+    total_taxes: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class TaxCalculationResponse(BaseModel):
+    """Response schema for tax calculation endpoint"""
+    amount: condecimal(max_digits=10, decimal_places=2)
+    tax_total: condecimal(max_digits=10, decimal_places=2)
+    total_with_tax: condecimal(max_digits=10, decimal_places=2)
+    taxes_applied: List[dict] = []
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
