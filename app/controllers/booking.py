@@ -32,7 +32,7 @@ router = APIRouter(
 )
 
 
-@router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 def create_booking_endpoint(
     booking: BookingCreate,
     db: Session = Depends(get_db),
@@ -44,7 +44,7 @@ def create_booking_endpoint(
     return create_booking(db, booking, current_user.id)
 
 
-@router.get("/", response_model=List[BookingResponse])
+@router.get("", response_model=List[BookingResponse])
 def read_bookings(
     skip: int = 0,
     limit: int = 100,

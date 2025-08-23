@@ -22,7 +22,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
-@router.get("/", response_model=PaymentListResponse)
+@router.get("", response_model=PaymentListResponse)
 async def list_payments(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -95,7 +95,7 @@ async def get_payment_methods():
     }
 
 
-@router.post("/", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def create_payment_endpoint(
     payment: PaymentCreate,
     db: Session = Depends(get_db),

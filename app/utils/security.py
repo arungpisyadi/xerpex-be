@@ -7,7 +7,7 @@ from typing import Any, Optional, Union
 from jose import jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -30,8 +30,8 @@ pwd_context = CryptContext(
     bcrypt__min_rounds=12  # Set minimum rounds for security
 )
 
-# OAuth2 scheme for token authentication
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
+# HTTPBearer scheme for token authentication
+oauth2_scheme = HTTPBearer()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -104,14 +104,14 @@ def create_access_token(subject: Union[str, Any], expires_delta: Optional[timede
 
 
 async def get_current_user(
-    db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
+    db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)
 ) -> User:
     """
     Get the current authenticated user
     
     Args:
         db: Database session
-        token: JWT token
+        credentials: HTTP Bearer credentials containing the JWT token
         
     Returns:
         User: Current user
@@ -125,11 +125,21 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    # Extract token from credentials
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    token = credentials.credentials
+    
     # Validate token format before attempting to decode
     if not token or not isinstance(token, str):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authentication token",
+            detail="Invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
     

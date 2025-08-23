@@ -24,7 +24,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/quotes", tags=["quotes"])
 
 
-@router.get("/", response_model=QuoteListResponse)
+@router.get("", response_model=QuoteListResponse)
 async def list_quotes(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -128,7 +128,7 @@ async def check_expired_quotes_endpoint(
     }
 
 
-@router.post("/", response_model=Quote, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=Quote, status_code=status.HTTP_201_CREATED)
 async def create_quote_endpoint(
     quote: QuoteCreate,
     db: Session = Depends(get_db),

@@ -20,7 +20,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/taxes", tags=["taxes"])
 
 
-@router.get("/", response_model=TaxListResponse)
+@router.get("", response_model=TaxListResponse)
 async def list_taxes(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -88,7 +88,7 @@ async def calculate_taxes(
     return result
 
 
-@router.post("/", response_model=Tax, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=Tax, status_code=status.HTTP_201_CREATED)
 async def create_tax_endpoint(
     tax: TaxCreate,
     db: Session = Depends(get_db),

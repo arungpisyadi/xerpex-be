@@ -20,7 +20,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/customers", tags=["customers"])
 
 
-@router.get("/", response_model=CustomerListResponse)
+@router.get("", response_model=CustomerListResponse)
 async def list_customers(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),

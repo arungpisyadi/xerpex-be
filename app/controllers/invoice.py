@@ -23,7 +23,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
 
-@router.get("/", response_model=InvoiceListResponse)
+@router.get("", response_model=InvoiceListResponse)
 async def list_invoices(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
@@ -152,7 +152,7 @@ async def create_invoice_from_quote(
         )
 
 
-@router.post("/", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
 async def create_invoice_endpoint(
     invoice: InvoiceCreate,
     db: Session = Depends(get_db),
