@@ -1,6 +1,7 @@
 """
 Customer API controllers for the XerpeX ERP System
 """
+print("DEBUG: Loading customer controller")
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from app.services.customer import (
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+print(f"DEBUG: Customer router created: {router}")
 
 
 @router.get("", response_model=CustomerListResponse)
@@ -83,7 +85,7 @@ async def get_customer_statistics_endpoint(
     return {"total_customers": count}
 
 
-@router.post("/", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
 async def create_customer_endpoint(
     customer: CustomerCreate,
     db: Session = Depends(get_db),
@@ -92,14 +94,17 @@ async def create_customer_endpoint(
     """
     Create a new customer
     """
+    print(f"DEBUG: create_customer_endpoint called with customer: {customer.dict()}")
     try:
         db_customer = create_customer(
             db=db,
             customer=customer,
             current_user=current_user
         )
+        print(f"DEBUG: Customer created successfully: {db_customer}")
         return db_customer
     except ValueError as e:
+        print(f"DEBUG: ValueError in create_customer: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)

@@ -99,6 +99,7 @@ app.include_router(package.router, prefix=settings.API_V1_STR)
 app.include_router(app_settings.router, prefix=settings.API_V1_STR)
 
 # Include new invoicing system routers
+print(f"DEBUG: Including customer router with prefix {settings.API_V1_STR}")
 app.include_router(customer.router, prefix=settings.API_V1_STR)
 app.include_router(tax.router, prefix=settings.API_V1_STR)
 app.include_router(quote.router, prefix=settings.API_V1_STR)
@@ -135,8 +136,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler to capture all unhandled exceptions"""
     # Use the convenience function to log exception with request
     log_exception_with_request(exc, request)
-    
+
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"},
     )
+
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+async def catch_all(request: Request, path: str):
+    """Catch-all route to log unmatched requests"""
+    print(f"DEBUG: Unmatched request - Method: {request.method}, URL: {request.url}, Path: {path}")
+    raise HTTPException(status_code=404, detail="Not found")
