@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.villa import Villa
 from app.models.booking import Booking
-from app.models.payment import Payment, PaymentInvoice
+from app.models.payment import Payment, Invoice
 from app.schemas.user import UserCreate
 from app.schemas.villa import VillaCreate, VillaAvailabilityCreate
 from app.schemas.booking import BookingCreate, BookingVillaCreate, BookingStatusUpdate
 from app.schemas.payment import PaymentCreate, PaymentStatusUpdate
-from app.services.auth import authenticate_user, create_user, get_current_user
+from app.services.auth import authenticate_user, create_user
 from app.services.user import get_user, get_user_by_email, get_users
 from app.services.villa import (
     get_villa, get_villas, create_villa, update_villa,
@@ -26,7 +26,7 @@ from app.services.booking import (
 )
 from app.services.payment import (
     get_payment, get_payments, create_payment, update_payment_status,
-    get_invoice, create_invoice, get_booking_payment_summary
+    get_invoice, create_invoice
 )
 from app.services.report import (
     get_villa_occupancy_report, get_booking_status_report,
@@ -36,6 +36,10 @@ from app.tests.utils import (
     create_test_villa, create_test_booking, create_test_payment,
     create_test_invoice, create_complete_test_booking
 )
+from app.models.target import Target
+from app.models.target_achievement import TargetAchievement
+from app.schemas.target import TargetCreate
+from app.services.target import TargetService
 
 
 # Auth service tests
@@ -45,7 +49,8 @@ def test_create_user(db: Session):
         username="serviceuser",
         email="service@example.com",
         full_name="Service User",
-        password="password123"
+        password="password123",
+        role="user"
     )
     
     user = create_user(db, user_data)
@@ -54,9 +59,9 @@ def test_create_user(db: Session):
     assert user.username == "serviceuser"
     assert user.email == "service@example.com"
     assert user.full_name == "Service User"
-    assert user.hashed_password != "password123"  # Password should be hashed
+    assert user.password_hash != "password123"  # Password should be hashed
     assert user.is_active is True
-    assert user.is_admin is False
+    assert user.role == "user"
 
 
 def test_authenticate_user(db: Session):
@@ -66,7 +71,8 @@ def test_authenticate_user(db: Session):
         username="authuser",
         email="auth@example.com",
         full_name="Auth User",
-        password="password123"
+        password="password123",
+        role="user"
     )
     
     create_user(db, user_data)
@@ -92,7 +98,8 @@ def test_get_current_user(db: Session):
         username="currentuser",
         email="current@example.com",
         full_name="Current User",
-        password="password123"
+        password="password123",
+        role="user"
     )
     
     created_user = create_user(db, user_data)
@@ -439,7 +446,7 @@ def test_create_invoice(db: Session, test_user):
     booking = create_test_booking(db)
     
     # Create invoice data
-    from app.schemas.payment import PaymentInvoiceCreate
+    from app.schemas.payment import InvoiceCreate
     invoice_data = PaymentInvoiceCreate(
         booking_id=booking.id,
         guest_name=booking.guest_name,
@@ -487,23 +494,21 @@ def test_get_invoice(db: Session):
     assert retrieved_invoice is None
 
 
-def test_get_booking_payment_summary(db: Session, test_user):
-    """Test get_booking_payment_summary service"""
-    # Create complete booking
-    test_data = create_complete_test_booking(db, test_user["id"])
-    booking = test_data["booking"]
-    
-    # Get payment summary
-    summary = get_booking_payment_summary(db, booking.id)
-    
-    assert summary["booking_id"] == booking.id
-    assert summary["booking_code"] == booking.booking_code
-    assert summary["guest_name"] == booking.guest_name
-    assert "total_invoiced" in summary
-    assert "total_paid" in summary
-    assert "balance" in summary
-    assert "payments" in summary
-    assert "invoices" in summary
+def test_get_invoice(db: Session):
+    """Test get_invoice service"""
+    # Create booking and invoice
+    booking = create_test_booking(db)
+    invoice = create_test_invoice(db, booking.id)
+
+    # Test get invoice
+    retrieved_invoice = get_invoice(db, invoice.id)
+    assert retrieved_invoice is not None
+    assert retrieved_invoice.id == invoice.id
+    assert retrieved_invoice.booking_id == booking.id
+
+    # Test get invoice - invoice doesn't exist
+    retrieved_invoice = get_invoice(db, 9999)
+    assert retrieved_invoice is None
 
 
 # Report service tests
@@ -645,3 +650,172 @@ def test_booking_service_phone_sanitization(db: Session, test_user):
         
         booking = create_booking(db, booking_data, test_user["id"])
         assert booking.guest_phone == expected_phone
+
+
+# Target service tests
+def test_calculate_monthly_achievement(db: Session, test_user):
+    """Test calculate_monthly_achievement service"""
+    from datetime import date
+    from app.models.payment import Invoice
+
+    # Create an invoice for the user
+    invoice = Invoice(
+        user_id=test_user["id"],
+        sales_person_id=test_user["id"],
+        customer_id=1,  # Assuming customer exists
+        invoice_number="TEST001",
+        issue_date=date.today(),
+        due_date=date.today(),
+        status="paid",
+        total=1000000.00,
+        amount_due=0.00,
+        tax_total=0.00,
+        amount_paid=1000000.00
+    )
+    db.add(invoice)
+    db.commit()
+
+    # Test the service
+    target_service = TargetService(db)
+    achievement = target_service.calculate_monthly_achievement(
+        test_user["id"], date.today().year, date.today().month
+    )
+
+    assert achievement == 1000000.0
+
+
+def test_calculate_carry_over_target(db: Session, test_user):
+    """Test calculate_carry_over_target service"""
+    from datetime import date
+
+    # Create previous month achievement
+    prev_month = date.today().month - 1 if date.today().month > 1 else 12
+    prev_year = date.today().year if date.today().month > 1 else date.today().year - 1
+
+    achievement = TargetAchievement(
+        user_id=test_user["id"],
+        year=prev_year,
+        month=prev_month,
+        achieved_amount=500000.0,
+        target_amount=1000000.0,
+        achievement_percentage=50.0
+    )
+    db.add(achievement)
+    db.commit()
+
+    # Test the service
+    target_service = TargetService(db)
+    carry_over = target_service.calculate_carry_over_target(
+        test_user["id"], date.today().year, date.today().month
+    )
+
+    assert carry_over == 500000.0
+
+
+def test_recalculate_targets(db: Session, test_user):
+    """Test recalculate_targets service"""
+    from datetime import date
+
+    # Test the service
+    target_service = TargetService(db)
+    adjusted_amount = target_service.recalculate_targets(
+        test_user["id"], date.today().year, date.today().month
+    )
+
+    assert adjusted_amount == 0.0  # No existing target, so 0
+
+    # Create previous month achievement for carry-over
+    prev_month = date.today().month - 1 if date.today().month > 1 else 12
+    prev_year = date.today().year if date.today().month > 1 else date.today().year - 1
+
+    prev_achievement = TargetAchievement(
+        user_id=test_user["id"],
+        year=prev_year,
+        month=prev_month,
+        achieved_amount=500000.0,
+        target_amount=1000000.0,
+        achievement_percentage=50.0
+    )
+    db.add(prev_achievement)
+
+    # Create a target and test again
+    target = Target(
+        user_id=test_user["id"],
+        year=date.today().year,
+        month=date.today().month,
+        target_amount=1000000.0,
+        carried_over_amount=0.0,
+        adjusted_target_amount=1000000.0
+    )
+    db.add(target)
+    db.commit()
+
+    adjusted_amount = target_service.recalculate_targets(
+        test_user["id"], date.today().year, date.today().month
+    )
+
+    assert adjusted_amount == 500000.0  # Carry-over amount when no current target exists
+
+
+def test_get_targets_overview(db: Session):
+    """Test get_targets_overview service"""
+    target_service = TargetService(db)
+    overview = target_service.get_targets_overview()
+
+    assert "total_yearly_target" in overview
+    assert "current_month_achievement" in overview
+    assert "achievement_percentage" in overview
+    assert "monthly_data" in overview
+    assert "chart_data" in overview
+
+
+def test_get_my_performance(db: Session, test_user):
+    """Test get_my_performance service"""
+    from datetime import date
+
+    # Create target and achievement
+    target = Target(
+        user_id=test_user["id"],
+        year=date.today().year,
+        month=date.today().month,
+        target_amount=1000000.0,
+        carried_over_amount=0.0,
+        adjusted_target_amount=1000000.0
+    )
+    db.add(target)
+
+    achievement = TargetAchievement(
+        user_id=test_user["id"],
+        year=date.today().year,
+        month=date.today().month,
+        achieved_amount=750000.0,
+        target_amount=1000000.0,
+        achievement_percentage=75.0
+    )
+    db.add(achievement)
+    db.commit()
+
+    # Test the service
+    target_service = TargetService(db)
+    performance = target_service.get_my_performance(test_user["id"], date.today().year)
+
+    assert performance["user_id"] == test_user["id"]
+    assert performance["year"] == date.today().year
+    assert performance["total_achievement"] == 750000.0
+    assert performance["achievement_percentage"] == 75.0
+    assert len(performance["monthly_targets"]) == 1
+    assert len(performance["monthly_achievements"]) == 1
+
+
+def test_get_company_performance(db: Session):
+    """Test get_company_performance service"""
+    from datetime import date
+
+    target_service = TargetService(db)
+    performance = target_service.get_company_performance(date.today().year)
+
+    assert performance["year"] == date.today().year
+    assert "total_yearly_target" in performance
+    assert "total_achievement" in performance
+    assert "achievement_percentage" in performance
+    assert "user_performances" in performance

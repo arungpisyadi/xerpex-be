@@ -35,9 +35,10 @@ class Payment(Base):
 class Invoice(Base):
     """Invoice model"""
     __tablename__ = "invoices"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    sales_person_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     quote_id = Column(Integer, ForeignKey("quotes.id", ondelete="SET NULL"), nullable=True)
     invoice_number = Column(String(50), unique=True, nullable=False, index=True)
@@ -51,9 +52,10 @@ class Invoice(Base):
     amount_paid = Column(Numeric(10, 2), nullable=False, default=0.00)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
-    user = relationship("User", back_populates="invoices")
+    user = relationship("User", foreign_keys=[user_id], back_populates="invoices")
+    sales_person = relationship("User", foreign_keys=[sales_person_id])
     customer = relationship("Customer", back_populates="invoices")
     quote = relationship("Quote", back_populates="invoices")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")

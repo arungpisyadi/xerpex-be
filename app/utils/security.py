@@ -8,6 +8,7 @@ from jose import jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security.utils import get_authorization_scheme_param
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -30,8 +31,32 @@ pwd_context = CryptContext(
     bcrypt__min_rounds=12  # Set minimum rounds for security
 )
 
-# HTTPBearer scheme for token authentication
-oauth2_scheme = HTTPBearer()
+# Custom HTTPBearer scheme for token authentication that returns 401 instead of 403
+class CustomHTTPBearer(HTTPBearer):
+    async def __call__(self, request):
+        authorization = request.headers.get("Authorization")
+        scheme, credentials = get_authorization_scheme_param(authorization)
+        if not (authorization and scheme and credentials):
+            if self.auto_error:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Not authenticated",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            else:
+                return None
+        if scheme.lower() != "bearer":
+            if self.auto_error:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication credentials",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            else:
+                return None
+        return HTTPAuthorizationCredentials(scheme=scheme, credentials=credentials)
+
+oauth2_scheme = CustomHTTPBearer()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

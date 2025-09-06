@@ -12,6 +12,8 @@ from app.models.package import Package
 from app.models.customer import Customer
 from app.models.tax import Tax
 from app.models.quote import Quote, QuoteItem
+from app.models.target import Target
+from app.models.target_achievement import TargetAchievement
 
 # For Alembic to detect all models
 __all__ = [
@@ -33,5 +35,7 @@ __all__ = [
     "Customer",
     "Tax",
     "Quote",
-    "QuoteItem"
+    "QuoteItem",
+    "Target",
+    "TargetAchievement"
 ]

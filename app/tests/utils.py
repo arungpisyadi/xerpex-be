@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.villa import Villa, VillaAvailability
 from app.models.booking import Booking, BookingVilla, BookingPackage, BookingAddon
-from app.models.payment import Payment, PaymentInvoice, PaymentInvoiceItem
+from app.models.payment import Payment, Invoice, InvoiceItem
 
 
 def create_test_villa(
@@ -207,21 +207,19 @@ def create_test_invoice(
     status: str = "pending",
     notes: Optional[str] = None,
     created_by: int = 1
-) -> PaymentInvoice:
+) -> Invoice:
     """
     Create a test invoice
     """
-    invoice = PaymentInvoice(
+    invoice = Invoice(
         invoice_number=f"INV{datetime.now().strftime('%y%m%d')}TEST",
-        booking_id=booking_id,
-        guest_name=guest_name,
-        guest_email=guest_email,
-        guest_phone=guest_phone,
+        user_id=created_by,
+        customer_id=1,  # Assuming customer exists
+        issue_date=datetime.utcnow(),
         due_date=due_date,
-        total_amount=total_amount,
         status=status,
+        total=total_amount,
         notes=notes,
-        created_by=created_by,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -237,17 +235,18 @@ def create_test_invoice_item(
     description: str = "Test Item",
     price: Decimal = Decimal("1000000.00"),
     quantity: int = 1
-) -> PaymentInvoiceItem:
+) -> InvoiceItem:
     """
     Create a test invoice item
     """
-    subtotal = price * Decimal(quantity)
-    item = PaymentInvoiceItem(
+    line_total = price * Decimal(quantity)
+    item = InvoiceItem(
         invoice_id=invoice_id,
-        description=description,
-        price=price,
-        quantity=quantity,
-        subtotal=subtotal
+        package_id=1,  # Assuming package exists
+        unit_price=price,
+        discount=Decimal('0.00'),
+        line_total=line_total,
+        created_at=datetime.utcnow()
     )
     db.add(item)
     db.commit()

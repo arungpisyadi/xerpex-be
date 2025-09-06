@@ -30,3 +30,4 @@ from app.services.report import (
     get_villa_occupancy_report, get_booking_status_report,
     get_revenue_report, get_top_villas_report, get_dashboard_summary
 )
+from app.services.target import TargetService

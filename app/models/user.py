@@ -32,9 +32,11 @@ class User(Base):
     customers = relationship("Customer", back_populates="user", cascade="all, delete-orphan")
     taxes = relationship("Tax", back_populates="user", cascade="all, delete-orphan")
     quotes = relationship("Quote", back_populates="user", cascade="all, delete-orphan")
-    invoices = relationship("Invoice", back_populates="user", cascade="all, delete-orphan")
+    invoices = relationship("Invoice", foreign_keys="Invoice.user_id", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
     packages = relationship("Package", back_populates="user", cascade="all, delete-orphan")
+    targets = relationship("Target", back_populates="user", cascade="all, delete-orphan")
+    target_achievements = relationship("TargetAchievement", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserActivity(Base):

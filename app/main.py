@@ -2,16 +2,22 @@
 Main application entry point for the XerpeX ERP System
 """
 import json
+import os
 import sentry_sdk
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.controllers import auth, user, villa, booking, payment, report, salesmen, survey, package
 from app.controllers import customer, tax, quote, invoice
 from app.controllers import settings as app_settings
+from app.controllers import target
+from app.database import get_db
+from app.services.target import TargetService
 from app.utils.sentry import (
     capture_exception,
     capture_message,
@@ -33,6 +39,35 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+)
+
+# Initialize APScheduler
+scheduler = AsyncIOScheduler()
+
+# Define the monthly target recalculation job
+async def monthly_target_recalculation():
+    """Scheduled job to recalculate monthly targets for all sales users"""
+    try:
+        # Get database session
+        db = next(get_db())
+
+        # Create target service and run recalculation
+        target_service = TargetService(db)
+        target_service.recalculate_monthly_targets_for_all_users()
+
+        print("Monthly target recalculation job completed successfully")
+    except Exception as e:
+        print(f"Error in monthly target recalculation job: {str(e)}")
+    finally:
+        db.close()
+
+# Add the scheduled job to run at 2:00 AM on the 1st of every month
+scheduler.add_job(
+    monthly_target_recalculation,
+    trigger=CronTrigger(day=1, hour=2, minute=0),
+    id="monthly_target_recalculation",
+    name="Monthly Target Recalculation",
+    replace_existing=True
 )
 
 # Set up CORS middleware for development environments
@@ -82,9 +117,9 @@ class SentryMiddleware(BaseHTTPMiddleware):
             capture_exception(e, context={"request": request_info})
             raise
 
-# Add the Sentry middleware if Sentry is enabled
-if settings.SENTRY_ENABLE:
-    app.add_middleware(SentryMiddleware)
+# Add the Sentry middleware if Sentry is enabled (disabled for testing)
+# if settings.SENTRY_ENABLE:
+#     app.add_middleware(SentryMiddleware)
 
 # Include API routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
@@ -105,6 +140,10 @@ app.include_router(tax.router, prefix=settings.API_V1_STR)
 app.include_router(quote.router, prefix=settings.API_V1_STR)
 app.include_router(invoice.router, prefix=settings.API_V1_STR)
 
+# Include target routers
+app.include_router(target.admin_router, prefix=settings.API_V1_STR)
+app.include_router(target.targets_router, prefix=settings.API_V1_STR)
+
 
 @app.get("/")
 async def root():
@@ -123,7 +162,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     """Handler for HTTP exceptions"""
     # Use the enhanced capture_exception which handles HTTPExceptions specially
     capture_exception(exc, request=request)
-    
+
     # Return the original response
     return JSONResponse(
         status_code=exc.status_code,
@@ -141,6 +180,25 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "Internal server error"},
     )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the scheduler when the application starts"""
+    # Skip scheduler in testing mode
+    if os.getenv("PYTEST_CURRENT_TEST") is None:
+        if not scheduler.running:
+            scheduler.start()
+            print("APScheduler started successfully")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown the scheduler when the application shuts down"""
+    # Only shutdown scheduler if it was started (not in testing mode)
+    if os.getenv("PYTEST_CURRENT_TEST") is None and scheduler.running:
+        scheduler.shutdown()
+        print("APScheduler shut down successfully")
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])

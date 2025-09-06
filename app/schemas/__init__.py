@@ -52,3 +52,7 @@ from app.schemas.quote import (
     QuoteBase, QuoteCreate, QuoteUpdate, QuoteStatusUpdate, QuoteInDB, Quote,
     QuoteDetail, QuoteSummary, QuoteConversionRequest, QuoteStatus
 )
+from app.schemas.target import (
+    TargetBase, TargetCreate, TargetUpdate, TargetInDB, TargetResponse,
+    TargetOverview, MyPerformance, CompanyPerformance
+)

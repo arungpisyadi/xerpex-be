@@ -53,12 +53,12 @@ def client(db: Session) -> Generator[TestClient, None, None]:
             yield db
         finally:
             pass
-    
+
     app.dependency_overrides[get_db] = override_get_db
-    
+
     with TestClient(app) as c:
         yield c
-    
+
     # Reset the dependency override
     app.dependency_overrides = {}
 
@@ -72,9 +72,9 @@ def test_user(db: Session) -> Dict[str, Any]:
         username="testuser",
         email="test@example.com",
         full_name="Test User",
-        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # password: secret
+        password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # password: secret
         is_active=True,
-        is_admin=False
+        role='user'
     )
     db.add(user)
     db.commit()
@@ -85,7 +85,7 @@ def test_user(db: Session) -> Dict[str, Any]:
         "username": user.username,
         "email": user.email,
         "full_name": user.full_name,
-        "is_admin": user.is_admin
+        "is_admin": user.role == 'admin'
     }
 
 
@@ -98,9 +98,9 @@ def test_admin(db: Session) -> Dict[str, Any]:
         username="testadmin",
         email="admin@example.com",
         full_name="Test Admin",
-        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # password: secret
+        password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # password: secret
         is_active=True,
-        is_admin=True
+        role='admin'
     )
     db.add(admin)
     db.commit()
@@ -111,7 +111,7 @@ def test_admin(db: Session) -> Dict[str, Any]:
         "username": admin.username,
         "email": admin.email,
         "full_name": admin.full_name,
-        "is_admin": admin.is_admin
+        "is_admin": admin.role == 'admin'
     }
 
 
@@ -121,7 +121,7 @@ def user_token(test_user: Dict[str, Any]) -> str:
     Create a JWT token for the test user
     """
     return create_access_token(
-        data={"sub": test_user["username"]}
+        subject=test_user["username"]
     )
 
 
@@ -131,7 +131,7 @@ def admin_token(test_admin: Dict[str, Any]) -> str:
     Create a JWT token for the test admin
     """
     return create_access_token(
-        data={"sub": test_admin["username"]}
+        subject=test_admin["username"]
     )
 
 
