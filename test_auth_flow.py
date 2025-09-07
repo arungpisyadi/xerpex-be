@@ -14,7 +14,7 @@ except ImportError:
     sys.exit(1)
 
 # Base URL for API
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = "http://localhost:8001/api/v1"
 
 def print_separator():
     """Print a separator line"""

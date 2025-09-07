@@ -125,6 +125,8 @@ async def update_target(
     try:
         target_service = TargetService(db)
         return target_service.update_target(target_id, target_data)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -156,6 +158,8 @@ async def delete_target(
         target_service = TargetService(db)
         target_service.delete_target(target_id)
         return {"message": "Target deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -163,15 +167,29 @@ async def delete_target(
         )
 
 
-@admin_router.get("/overview")
-async def get_targets_overview():
+@admin_router.get("/overview", response_model=TargetOverview)
+async def get_targets_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     """
     Get targets overview (Admin only)
 
+    Args:
+        db: Database session
+        current_user: Current admin user
+
     Returns:
-        dict: Test data
+        TargetOverview: Overview data
     """
-    return {"message": "test"}
+    try:
+        target_service = TargetService(db)
+        return target_service.get_targets_overview()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting targets overview: {str(e)}"
+        )
 
 
 @targets_router.get("/my-performance", response_model=MyPerformance)

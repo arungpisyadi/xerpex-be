@@ -3,14 +3,14 @@ Target schemas for the XerpeX ERP System
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TargetBase(BaseModel):
     """Base target schema"""
     user_id: int
-    year: int
-    month: int
+    year: int = Field(..., gt=0, description="Year must be positive")
+    month: int = Field(..., ge=1, le=12, description="Month must be between 1 and 12")
     target_amount: float
 
 
