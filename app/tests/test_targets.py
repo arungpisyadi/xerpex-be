@@ -86,6 +86,8 @@ def test_set_target_admin_only(client: TestClient, admin_headers, test_sales_use
     }
 
     response = client.post("/api/v1/admin/targets", json=target_data, headers=admin_headers)
+    print(f"Response status: {response.status_code}")
+    print(f"Response content: {response.text}")
     assert response.status_code == 201
     data = response.json()
     assert "message" in data
@@ -212,9 +214,9 @@ def test_delete_target_unauthorized(client: TestClient, user_headers, test_targe
 
 
 # General Targets API tests
-def test_get_targets_overview_authenticated(client: TestClient, user_headers):
-    """Test GET /targets/overview - Authenticated user"""
-    response = client.get("/api/v1/targets/overview", headers=user_headers)
+def test_get_targets_overview_authenticated(client: TestClient, admin_headers):
+    """Test GET /admin/targets/overview - Admin user"""
+    response = client.get("/api/v1/admin/targets/overview", headers=admin_headers)
     print(f"Response status: {response.status_code}")
     print(f"Response content: {response.text}")
     assert response.status_code == 200
@@ -224,11 +226,53 @@ def test_get_targets_overview_authenticated(client: TestClient, user_headers):
     assert "achievement_percentage" in data
     assert "monthly_data" in data
     assert "chart_data" in data
+    assert "ytd_metrics" in data
+    assert "active_users_count" in data
+    assert "top_performers" in data
+
+    # Check ytd_metrics structure
+    ytd_metrics = data["ytd_metrics"]
+    assert "ytd_target" in ytd_metrics
+    assert "ytd_achievement" in ytd_metrics
+    assert "ytd_percentage" in ytd_metrics
+
+    # Check monthly_data structure
+    monthly_data = data["monthly_data"]
+    assert isinstance(monthly_data, list)
+    if len(monthly_data) > 0:
+        item = monthly_data[0]
+        assert "month" in item
+        assert "month_name" in item
+        assert "target_amount" in item
+        assert "achieved_amount" in item
+        assert "achievement_percentage" in item
+        assert "carried_over_amount" in item
+
+    # Check chart_data structure
+    chart_data = data["chart_data"]
+    assert isinstance(chart_data, list)
+    if len(chart_data) > 0:
+        item = chart_data[0]
+        assert "month" in item
+        assert "month_name" in item
+        assert "target" in item
+        assert "achievement" in item
+
+    # Check top_performers structure
+    top_performers = data["top_performers"]
+    assert isinstance(top_performers, list)
+    if len(top_performers) > 0:
+        item = top_performers[0]
+        assert "user_id" in item
+        assert "username" in item
+        assert "full_name" in item
+        assert "total_achievement" in item
+        assert "achievement_percentage" in item
 
 
 def test_get_targets_overview_unauthenticated(client: TestClient):
-    """Test GET /targets/overview - Unauthenticated"""
-    response = client.get("/api/v1/targets/overview")
+    """Test GET /admin/targets/overview - Unauthenticated"""
+    response = client.get("/api/v1/admin/targets/overview")
     assert response.status_code == 401
 
 
@@ -324,13 +368,13 @@ def test_update_target_partial_update(client: TestClient, admin_headers, test_ta
     assert response.status_code == 200
 
 
-def test_get_targets_overview_empty_data(client: TestClient, user_headers, db: Session):
-    """Test GET /targets/overview - Empty data"""
+def test_get_targets_overview_empty_data(client: TestClient, admin_headers, db: Session):
+    """Test GET /admin/targets/overview - Empty data"""
     # Remove all targets
     db.query(Target).delete()
     db.commit()
 
-    response = client.get("/api/v1/targets/overview", headers=user_headers)
+    response = client.get("/api/v1/admin/targets/overview", headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
     # Should handle empty data gracefully

@@ -13,6 +13,8 @@ from app.database import Base, get_db
 from app.main import app
 from app.utils.security import create_access_token
 from app.models.user import User
+# Import all models to ensure they are registered with SQLAlchemy
+from app.models import *
 
 
 # Use an in-memory SQLite database for testing

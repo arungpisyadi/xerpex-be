@@ -9,7 +9,19 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.target import TargetCreate, TargetUpdate, TargetResponse, TargetOverview, MyPerformance, CompanyPerformance
+from app.schemas.target import (
+    TargetCreate,
+    TargetUpdate,
+    TargetResponse,
+    TargetOverview,
+    MyPerformance,
+    CompanyPerformance,
+    UserPerformanceChart,
+    MonthlyData,
+    ChartDataPoint,
+    TopPerformer,
+    YTDMetrics
+)
 from app.services.target import TargetService
 from app.utils.security import get_current_active_user, get_current_admin_user
 
@@ -151,32 +163,15 @@ async def delete_target(
         )
 
 
-@targets_router.get("/overview", response_model=TargetOverview)
-async def get_targets_overview(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
+@admin_router.get("/overview")
+async def get_targets_overview():
     """
-    Get targets overview
-
-    Args:
-        db: Database session
-        current_user: Current user
+    Get targets overview (Admin only)
 
     Returns:
-        TargetOverview: Overview data
-
-    Raises:
-        HTTPException: If error occurs
+        dict: Test data
     """
-    try:
-        target_service = TargetService(db)
-        return target_service.get_targets_overview()
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting targets overview: {str(e)}"
-        )
+    return {"message": "test"}
 
 
 @targets_router.get("/my-performance", response_model=MyPerformance)
@@ -249,4 +244,36 @@ async def get_company_performance(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error getting company performance: {str(e)}"
+        )
+
+
+@targets_router.get("/user-performances", response_model=UserPerformanceChart)
+async def get_user_performance_chart(
+    year: int,
+    user_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get user performance data formatted for bar chart visualization
+
+    Args:
+        year: Year for performance data
+        user_id: Optional user ID filter (if provided, returns data for specific user only)
+        db: Database session
+        current_user: Current user
+
+    Returns:
+        UserPerformanceChart: Chart-ready performance data
+
+    Raises:
+        HTTPException: If error occurs
+    """
+    try:
+        target_service = TargetService(db)
+        return target_service.get_user_performance_chart(year, user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting user performance chart: {str(e)}"
         )
