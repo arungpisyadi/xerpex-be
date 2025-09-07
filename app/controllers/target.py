@@ -249,7 +249,7 @@ async def get_company_performance(
 
 @targets_router.get("/user-performances", response_model=UserPerformanceChart)
 async def get_user_performance_chart(
-    year: int,
+    year: Optional[int] = None,
     user_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -269,6 +269,9 @@ async def get_user_performance_chart(
     Raises:
         HTTPException: If error occurs
     """
+    if year is None:
+        year = datetime.utcnow().year
+
     try:
         target_service = TargetService(db)
         return target_service.get_user_performance_chart(year, user_id)

@@ -31,32 +31,7 @@ pwd_context = CryptContext(
     bcrypt__min_rounds=12  # Set minimum rounds for security
 )
 
-# Custom HTTPBearer scheme for token authentication that returns 401 instead of 403
-class CustomHTTPBearer(HTTPBearer):
-    async def __call__(self, request):
-        authorization = request.headers.get("Authorization")
-        scheme, credentials = get_authorization_scheme_param(authorization)
-        if not (authorization and scheme and credentials):
-            if self.auto_error:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Not authenticated",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            else:
-                return None
-        if scheme.lower() != "bearer":
-            if self.auto_error:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid authentication credentials",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            else:
-                return None
-        return HTTPAuthorizationCredentials(scheme=scheme, credentials=credentials)
-
-oauth2_scheme = CustomHTTPBearer()
+oauth2_scheme = HTTPBearer()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -199,7 +174,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    user = db.query(User).filter(User.username == user_id).first()
+    user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
