@@ -104,7 +104,7 @@ def create_access_token(subject: Union[str, Any], expires_delta: Optional[timede
 
 
 async def get_current_user(
-    db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)
+    db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))
 ) -> User:
     """
     Get the current authenticated user

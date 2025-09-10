@@ -13,6 +13,7 @@ class InvoiceStatus(str, Enum):
     """Invoice status enumeration"""
     draft = "draft"
     sent = "sent"
+    partially_paid = "partially_paid"
     paid = "paid"
     overdue = "overdue"
     cancelled = "cancelled"
@@ -101,6 +102,7 @@ class InvoiceCreate(InvoiceBase):
     """Invoice creation schema"""
     items: List[InvoiceItemCreate] = Field(..., min_items=1)
     quote_id: Optional[int] = None  # For quote-to-invoice conversion
+    payment_terms: Optional[str] = "Due on receipt"  # Optional with default value
 
 
 class InvoiceUpdate(BaseModel):
@@ -125,6 +127,7 @@ class InvoiceResponse(InvoiceBase):
     user_id: int
     invoice_number: str
     quote_id: Optional[int] = None
+    payment_terms: Optional[str] = None
     total: Decimal
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None

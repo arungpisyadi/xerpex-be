@@ -285,16 +285,18 @@ class TargetService:
         """
         try:
             # Get total yearly target
-            total_yearly = self.db.query(func.sum(Target.target_amount)).filter(
+            total_yearly_raw = self.db.query(func.sum(Target.target_amount)).filter(
                 Target.year == year
-            ).scalar() or 0.0
+            ).scalar()
+            total_yearly = float(total_yearly_raw) if total_yearly_raw is not None else 0.0
 
             # Get total achievement
-            total_achievement = self.db.query(func.sum(TargetAchievement.achieved_amount)).filter(
+            total_achievement_raw = self.db.query(func.sum(TargetAchievement.achieved_amount)).filter(
                 TargetAchievement.year == year
-            ).scalar() or 0.0
+            ).scalar()
+            total_achievement = float(total_achievement_raw) if total_achievement_raw is not None else 0.0
 
-            # Calculate percentage
+            # Calculate percentage (both operands are now float)
             percentage = (total_achievement / total_yearly * 100) if total_yearly > 0 else 0.0
 
             return {

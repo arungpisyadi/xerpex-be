@@ -13,7 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 from app.controllers import auth, user, villa, booking, payment, report, salesmen, survey, package
-from app.controllers import customer, tax, quote, invoice
+from app.controllers import customer, tax, quote, invoice, kpi
 from app.controllers import settings as app_settings
 from app.controllers import target
 from app.database import get_db
@@ -139,6 +139,9 @@ app.include_router(customer.router, prefix=settings.API_V1_STR)
 app.include_router(tax.router, prefix=settings.API_V1_STR)
 app.include_router(quote.router, prefix=settings.API_V1_STR)
 app.include_router(invoice.router, prefix=settings.API_V1_STR)
+
+# Include KPI router
+app.include_router(kpi.router, prefix=settings.API_V1_STR)
 
 # Include target routers
 app.include_router(target.admin_router, prefix=settings.API_V1_STR)

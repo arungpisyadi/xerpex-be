@@ -144,14 +144,14 @@ def get_invoices(
     return query.order_by(Invoice.created_at.desc()).offset(skip).limit(limit).all()
 
 
-def create_invoice(db: Session, invoice: InvoiceCreate, user_id: int) -> Invoice:
+def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> Invoice:
     """
     Create a new invoice with items
     
     Args:
         db: Database session
         invoice: Invoice data
-        user_id: Current user ID for isolation
+        current_user: Current user for isolation and validation
         
     Returns:
         Invoice: Created invoice
@@ -160,7 +160,7 @@ def create_invoice(db: Session, invoice: InvoiceCreate, user_id: int) -> Invoice
         HTTPException: If customer not found or validation fails
     """
     # Validate customer exists and belongs to user
-    customer = get_customer(db, invoice.customer_id, user_id)
+    customer = get_customer(db, invoice.customer_id, current_user)
     if not customer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -176,16 +176,18 @@ def create_invoice(db: Session, invoice: InvoiceCreate, user_id: int) -> Invoice
     
     # Create invoice
     db_invoice = Invoice(
-        user_id=user_id,
+        user_id=current_user.id,
         customer_id=invoice.customer_id,
+        booking_id=None,  # Set to None for now as it's optional
         invoice_number=invoice_number,
         quote_id=invoice.quote_id,
         issue_date=invoice.issue_date,
         due_date=invoice.due_date,
-        status=invoice.status,
+        status=invoice.status.value if hasattr(invoice.status, 'value') else str(invoice.status),
+        payment_terms=invoice.payment_terms,
+        notes=invoice.notes,
         total=Decimal('0.00'),
         tax_total=invoice.tax_total,
-        notes=invoice.notes,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -198,7 +200,7 @@ def create_invoice(db: Session, invoice: InvoiceCreate, user_id: int) -> Invoice
     for item_data in invoice.items:
         # Validate package exists and belongs to user
         package = get_package(db, item_data.package_id)
-        if not package or package.user_id != user_id:
+        if not package or package.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Package with ID {item_data.package_id} not found"

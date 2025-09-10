@@ -165,7 +165,7 @@ async def create_invoice_endpoint(
         db_invoice = create_invoice(
             db=db,
             invoice=invoice,
-            user_id=current_user.id
+            current_user=current_user
         )
         return db_invoice
     except ValueError as e:
