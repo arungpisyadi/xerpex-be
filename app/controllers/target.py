@@ -58,7 +58,8 @@ async def set_target(
         adjusted_target = target_service.recalculate_targets(
             target_data.user_id,
             target_data.year,
-            target_data.month
+            target_data.month,
+            target_data.target_amount
         )
 
         return {

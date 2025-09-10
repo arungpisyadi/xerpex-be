@@ -93,7 +93,7 @@ class TargetService:
                 detail=f"Error calculating carry-over target: {str(e)}"
             )
 
-    def recalculate_targets(self, user_id: int, year: int, month: int) -> float:
+    def recalculate_targets(self, user_id: int, year: int, month: int, target_amount: float = 0.0) -> float:
         """
         Recalculate targets with carry-over
 
@@ -101,6 +101,7 @@ class TargetService:
             user_id: User ID
             year: Year
             month: Month
+            target_amount: Target amount to set (defaults to 0.0 for backward compatibility)
 
         Returns:
             float: Adjusted target amount
@@ -118,7 +119,7 @@ class TargetService:
                 )
             ).first()
 
-            current_amount = float(current_target.target_amount) if current_target else 0.0
+            current_amount = float(target_amount) if target_amount > 0.0 else (float(current_target.target_amount) if current_target else 0.0)
             adjusted_amount = current_amount + carried_over
 
             # Upsert target
@@ -131,7 +132,7 @@ class TargetService:
                     user_id=user_id,
                     year=year,
                     month=month,
-                    target_amount=current_amount,
+                    target_amount=float(target_amount) if target_amount > 0.0 else current_amount,
                     carried_over_amount=carried_over,
                     adjusted_target_amount=adjusted_amount
                 )
