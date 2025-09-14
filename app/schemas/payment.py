@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Optional, List
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, root_validator
 
 
 class InvoiceStatus(str, Enum):
@@ -36,6 +36,44 @@ class PaymentMethod(str, Enum):
     digital_wallet = "digital_wallet"
     check = "check"
     other = "other"
+
+
+class InvoiceHistoryEventCategory(str, Enum):
+    """Invoice history event category enumeration"""
+    lifecycle = "lifecycle"
+    status = "status"
+    workflow = "workflow"
+    payment = "payment"
+
+
+# Invoice History Schemas
+class InvoiceHistoryResponse(BaseModel):
+    """Invoice history event response schema"""
+    id: int
+    event_type: str
+    event_category: InvoiceHistoryEventCategory
+    description: str
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    metadata: Optional[dict] = None
+    created_at: datetime
+    formatted_date: str
+
+    class Config:
+        from_attributes = True
+
+
+class InvoiceHistoryListResponse(BaseModel):
+    """Response schema for invoice history endpoint"""
+    invoice_id: int
+    invoice_number: str
+    history: List[InvoiceHistoryResponse]
+    total_events: int
+    skip: int
+    limit: int
+
+    class Config:
+        from_attributes = True
 
 
 # Invoice Item Schemas
@@ -75,6 +113,22 @@ class InvoiceItemResponse(InvoiceItemBase):
     invoice_id: int
     package_name: Optional[str] = None
     created_at: datetime
+
+    @root_validator(pre=True)
+    def extract_package_name(cls, values):
+        """Extract package name from the package relationship"""
+        # If values is a SQLAlchemy model object, extract the package name
+        if hasattr(values, 'package') and values.package and hasattr(values.package, 'name'):
+            # Create a dict from the object and add the package_name
+            if hasattr(values, '__dict__'):
+                result = {k: v for k, v in values.__dict__.items() if not k.startswith('_')}
+                result['package_name'] = values.package.name
+                return result
+        # If values is already a dict, check if it has a package key
+        elif isinstance(values, dict) and 'package' in values:
+            if values['package'] and hasattr(values['package'], 'name'):
+                values['package_name'] = values['package'].name
+        return values
 
     class Config:
         from_attributes = True
@@ -131,10 +185,39 @@ class InvoiceResponse(InvoiceBase):
     total: Decimal
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None
+    billing_address: Optional[str] = None
     items: List[InvoiceItemResponse] = []
     payments: List['PaymentResponse'] = []
     created_at: datetime
     updated_at: datetime
+
+    @root_validator(pre=True)
+    def extract_customer_data(cls, values):
+        """Extract customer name, email, and billing address from the customer relationship"""
+        # If values is a SQLAlchemy model object, extract the customer data
+        if hasattr(values, 'customer') and values.customer:
+            # Create a dict from the object and add the customer fields
+            if hasattr(values, '__dict__'):
+                result = {k: v for k, v in values.__dict__.items() if not k.startswith('_')}
+                if hasattr(values.customer, 'name'):
+                    result['customer_name'] = values.customer.name
+                if hasattr(values.customer, 'email'):
+                    result['customer_email'] = values.customer.email
+                # Extract billing address with fallback
+                billing_addr = values.customer.billing_address or values.customer.address
+                result['billing_address'] = billing_addr
+                return result
+        # If values is already a dict, check if it has a customer key
+        elif isinstance(values, dict) and 'customer' in values:
+            if values['customer']:
+                if hasattr(values['customer'], 'name'):
+                    values['customer_name'] = values['customer'].name
+                if hasattr(values['customer'], 'email'):
+                    values['customer_email'] = values['customer'].email
+                # Extract billing address with fallback
+                billing_addr = values['customer'].billing_address or values['customer'].address
+                values['billing_address'] = billing_addr
+        return values
 
     class Config:
         from_attributes = True

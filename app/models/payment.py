@@ -2,7 +2,7 @@
 Payment models for the XerpeX ERP System
 """
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, DateTime, Date, Text, Numeric, ForeignKey, CheckConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Date, Text, Numeric, ForeignKey, CheckConstraint, JSON, Index
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -62,6 +62,7 @@ class Invoice(Base):
     quote = relationship("Quote", back_populates="invoices")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
+    history = relationship("InvoiceHistory", back_populates="invoice", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (
@@ -91,5 +92,36 @@ class InvoiceItem(Base):
     
     # Constraints
     __table_args__ = (
+        {"sqlite_autoincrement": True},  # For SQLite compatibility
+    )
+
+
+class InvoiceHistory(Base):
+    """Invoice history model for tracking invoice lifecycle events"""
+    __tablename__ = "invoice_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(String(50), nullable=False)
+    event_category = Column(String(30), nullable=False)
+    description = Column(Text, nullable=False)
+    event_metadata = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    invoice = relationship("Invoice", back_populates="history")
+    user = relationship("User", back_populates="invoice_history")
+    
+    # Constraints and Indexes
+    __table_args__ = (
+        CheckConstraint(
+            "event_category IN ('lifecycle', 'status', 'workflow', 'payment')",
+            name="check_invoice_history_event_category"
+        ),
+        Index('idx_invoice_history_invoice_id', 'invoice_id'),
+        Index('idx_invoice_history_created_at_desc', 'created_at'),
+        Index('idx_invoice_history_event_category', 'event_category'),
+        Index('idx_invoice_history_composite', 'invoice_id', 'created_at', 'event_category'),
         {"sqlite_autoincrement": True},  # For SQLite compatibility
     )

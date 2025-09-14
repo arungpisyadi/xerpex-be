@@ -37,6 +37,7 @@ class User(Base):
     packages = relationship("Package", back_populates="user", cascade="all, delete-orphan")
     targets = relationship("Target", back_populates="user", cascade="all, delete-orphan")
     target_achievements = relationship("TargetAchievement", back_populates="user", cascade="all, delete-orphan")
+    invoice_history = relationship("InvoiceHistory", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserActivity(Base):

@@ -11,13 +11,16 @@ from app.models.user import User
 from app.schemas.payment import (
     InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceResponse,
     InvoiceStatus, QuoteToInvoiceRequest, InvoiceListResponse,
-    OverdueInvoicesResponse, OverdueInvoicesCheckResponse, InvoicePreviewResponse
+    OverdueInvoicesResponse, OverdueInvoicesCheckResponse, InvoicePreviewResponse,
+    InvoiceHistoryListResponse, InvoiceHistoryEventCategory
 )
 from app.services.payment import (
     get_invoice, get_invoice_by_number, get_invoices, create_invoice,
     update_invoice, update_invoice_status, delete_invoice,
-    convert_quote_to_invoice, check_overdue_invoices, get_invoice_statistics
+    convert_quote_to_invoice, check_overdue_invoices, get_invoice_statistics,
+    get_invoice_history, count_invoice_history
 )
+from app.services.settings import get_general_settings
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -412,12 +415,17 @@ async def preview_invoice(
     
     balance_due = invoice.total - total_paid
     
+    # Get company information from settings
+    settings = get_general_settings(db)
+    company_name = settings.company_name if settings else "Your Company"
+    company_email = settings.company_email if settings else current_user.email
+    
     # Return formatted data for preview/PDF generation
     return {
         "invoice": invoice,
         "company_info": {
-            "name": current_user.company_name or "Your Company",
-            "email": current_user.email,
+            "name": company_name,
+            "email": company_email,
             # Add more company details as needed
         },
         "payment_summary": {
@@ -430,4 +438,85 @@ async def preview_invoice(
         "formatted_due_date": invoice.due_date.strftime("%B %d, %Y"),
         "status_display": invoice.status.title(),
         "is_overdue": invoice.due_date < date.today() and invoice.status in ['sent', 'overdue']
+    }
+
+
+@router.get("/{invoice_id}/pdf", response_model=InvoicePreviewResponse)
+async def get_invoice_pdf(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get invoice PDF data - alias for preview endpoint
+    """
+    return await preview_invoice(invoice_id, db, current_user)
+
+
+@router.get("/{invoice_id}/history", response_model=InvoiceHistoryListResponse)
+async def get_invoice_history_endpoint(
+    invoice_id: int,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
+    event_category: Optional[InvoiceHistoryEventCategory] = Query(None, description="Filter by event category"),
+    from_date: Optional[date] = Query(None, description="Filter by date from"),
+    to_date: Optional[date] = Query(None, description="Filter by date to"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get invoice history with optional filtering and pagination
+    """
+    # First verify the invoice exists and user has access
+    invoice = get_invoice(db=db, invoice_id=invoice_id, current_user=current_user)
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice not found"
+        )
+    
+    # Get history events
+    history_events = get_invoice_history(
+        db=db,
+        invoice_id=invoice_id,
+        current_user=current_user,
+        skip=skip,
+        limit=limit,
+        event_category=event_category.value if event_category else None,
+        from_date=from_date,
+        to_date=to_date
+    )
+    
+    # Get total count for pagination
+    total_events = count_invoice_history(
+        db=db,
+        invoice_id=invoice_id,
+        current_user=current_user,
+        event_category=event_category.value if event_category else None,
+        from_date=from_date,
+        to_date=to_date
+    )
+    
+    # Format history events for response
+    formatted_history = []
+    for event in history_events:
+        formatted_history.append({
+            "id": event.id,
+            "event_type": event.event_type,
+            "event_category": event.event_category,
+            "description": event.description,
+            "user_name": event.user.full_name if event.user and event.user.full_name else event.user.username if event.user else "Unknown User",
+            "user_email": event.user.email if event.user else None,
+            "metadata": event.event_metadata,
+            "created_at": event.created_at,
+            "formatted_date": event.created_at.strftime("%B %d, %Y at %I:%M %p")
+        })
+    
+    return {
+        "invoice_id": invoice_id,
+        "invoice_number": invoice.invoice_number,
+        "history": formatted_history,
+        "total_events": total_events,
+        "skip": skip,
+        "limit": limit
     }

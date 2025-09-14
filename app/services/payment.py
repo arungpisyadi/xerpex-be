@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func
 
-from app.models.payment import Invoice, InvoiceItem, Payment
+from app.models.payment import Invoice, InvoiceItem, Payment, InvoiceHistory
 from app.models.customer import Customer
 from app.models.package import Package
 from app.models.quote import Quote, QuoteItem
@@ -225,6 +225,21 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
     db.commit()
     db.refresh(db_invoice)
     
+    # Log history event
+    safe_log_invoice_history(
+        db=db,
+        invoice_id=db_invoice.id,
+        user_id=current_user.id,
+        event_type="invoice_created",
+        event_category="lifecycle",
+        description="Invoice created",
+        metadata={
+            "total_amount": str(db_invoice.total),
+            "customer_name": customer.name,
+            "status": db_invoice.status
+        }
+    )
+    
     return db_invoice
 
 
@@ -366,11 +381,48 @@ def update_invoice_status(
             detail=f"Cannot change status from '{db_invoice.status}' to '{status_update.status}'"
         )
     
+    old_status = db_invoice.status
     db_invoice.status = status_update.status
     db_invoice.updated_at = datetime.utcnow()
     
     db.commit()
     db.refresh(db_invoice)
+    
+    # Log history event for status change
+    event_type = "status_changed"
+    event_category = "status"
+    description = f"Invoice status changed from '{old_status}' to '{status_update.status}'"
+    
+    # Use more specific event types for workflow actions
+    if status_update.status == "sent":
+        event_type = "invoice_sent"
+        event_category = "workflow"
+        description = "Invoice sent to customer"
+    elif status_update.status == "cancelled":
+        event_type = "invoice_cancelled"
+        event_category = "workflow"
+        description = "Invoice cancelled"
+    elif status_update.status == "draft" and old_status == "cancelled":
+        event_type = "invoice_reopened"
+        event_category = "workflow"
+        description = "Invoice reopened from cancelled status"
+    elif status_update.status == "paid":
+        event_type = "fully_paid"
+        event_category = "payment"
+        description = "Invoice marked as fully paid"
+    
+    safe_log_invoice_history(
+        db=db,
+        invoice_id=db_invoice.id,
+        user_id=user_id,
+        event_type=event_type,
+        event_category=event_category,
+        description=description,
+        metadata={
+            "old_status": old_status,
+            "new_status": status_update.status
+        }
+    )
     
     return db_invoice
 
@@ -552,6 +604,22 @@ def create_payment(db: Session, payment: PaymentCreate, user_id: int) -> Payment
     db.commit()
     db.refresh(db_payment)
     
+    # Log history event for payment creation
+    safe_log_invoice_history(
+        db=db,
+        invoice_id=payment.invoice_id,
+        user_id=user_id,
+        event_type="payment_added",
+        event_category="payment",
+        description=f"Payment of ${payment.amount} added",
+        metadata={
+            "payment_id": db_payment.id,
+            "amount": str(payment.amount),
+            "payment_method": payment.payment_method,
+            "reference_number": payment.reference_number
+        }
+    )
+    
     # Check if invoice is fully paid
     _update_invoice_payment_status(db, invoice)
     
@@ -640,10 +708,38 @@ def update_payment_status(
             detail="Payment not found"
         )
     
+    old_status = db_payment.status
     db_payment.status = status_update.status
     db_payment.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_payment)
+    
+    # Log history event for payment status change
+    event_type = "payment_status_changed"
+    description = f"Payment status changed from '{old_status}' to '{status_update.status}'"
+    
+    # Use more specific event types
+    if status_update.status == PaymentStatus.completed:
+        event_type = "payment_completed"
+        description = f"Payment of ${db_payment.amount} completed"
+    elif status_update.status == PaymentStatus.failed:
+        event_type = "payment_failed"
+        description = f"Payment of ${db_payment.amount} failed"
+    
+    safe_log_invoice_history(
+        db=db,
+        invoice_id=db_payment.invoice_id,
+        user_id=user_id,
+        event_type=event_type,
+        event_category="payment",
+        description=description,
+        metadata={
+            "payment_id": db_payment.id,
+            "amount": str(db_payment.amount),
+            "old_status": old_status.value if hasattr(old_status, 'value') else str(old_status),
+            "new_status": status_update.status.value if hasattr(status_update.status, 'value') else str(status_update.status)
+        }
+    )
     
     # Update invoice payment status
     _update_invoice_payment_status(db, db_payment.invoice)
@@ -779,6 +875,21 @@ def convert_quote_to_invoice(
     
     db.commit()
     db.refresh(db_invoice)
+    
+    # Log history event for quote conversion
+    safe_log_invoice_history(
+        db=db,
+        invoice_id=db_invoice.id,
+        user_id=user_id,
+        event_type="invoice_converted_from_quote",
+        event_category="lifecycle",
+        description=f"Invoice created from accepted quote #{quote.quote_number}",
+        metadata={
+            "quote_id": quote.id,
+            "quote_number": quote.quote_number,
+            "total_amount": str(db_invoice.total)
+        }
+    )
     
     return db_invoice
 
@@ -930,3 +1041,182 @@ def get_payment_statistics(db: Session, user_id: int) -> Dict[str, Any]:
         'total_amount': total_amount,
         'recent_payments': recent_payments
     }
+
+
+# Invoice History Services
+def log_invoice_history(
+    db: Session,
+    invoice_id: int,
+    user_id: int,
+    event_type: str,
+    event_category: str,
+    description: str,
+    metadata: Optional[Dict[str, Any]] = None
+) -> Optional[InvoiceHistory]:
+    """
+    Log an invoice history event
+    
+    Args:
+        db: Database session
+        invoice_id: Invoice ID
+        user_id: User ID who performed the action
+        event_type: Type of event (e.g., 'invoice_created', 'status_changed')
+        event_category: Category of event ('lifecycle', 'status', 'workflow', 'payment')
+        description: Human-readable description of the event
+        metadata: Optional additional event metadata
+        
+    Returns:
+        InvoiceHistory: Created history record or None if failed
+    """
+    try:
+        history_record = InvoiceHistory(
+            invoice_id=invoice_id,
+            user_id=user_id,
+            event_type=event_type,
+            event_category=event_category,
+            description=description,
+            event_metadata=metadata,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(history_record)
+        db.commit()
+        db.refresh(history_record)
+        
+        return history_record
+    
+    except Exception as e:
+        # Log the error but don't break the main operation
+        print(f"Failed to log invoice history: {e}")
+        db.rollback()
+        return None
+
+
+def safe_log_invoice_history(
+    db: Session,
+    invoice_id: int,
+    user_id: int,
+    event_type: str,
+    event_category: str,
+    description: str,
+    metadata: Optional[Dict[str, Any]] = None
+) -> None:
+    """
+    Safely log invoice history event without breaking main operations
+    
+    Args:
+        db: Database session
+        invoice_id: Invoice ID
+        user_id: User ID who performed the action
+        event_type: Type of event
+        event_category: Category of event
+        description: Description of the event
+        metadata: Optional additional event metadata
+    """
+    try:
+        log_invoice_history(
+            db=db,
+            invoice_id=invoice_id,
+            user_id=user_id,
+            event_type=event_type,
+            event_category=event_category,
+            description=description,
+            metadata=metadata
+        )
+    except Exception as e:
+        # Log error but don't break main operation
+        print(f"Failed to safely log invoice history: {e}")
+
+
+def get_invoice_history(
+    db: Session,
+    invoice_id: int,
+    current_user: User,
+    skip: int = 0,
+    limit: int = 50,
+    event_category: Optional[str] = None,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None
+) -> List[InvoiceHistory]:
+    """
+    Get invoice history with optional filtering and pagination
+    
+    Args:
+        db: Database session
+        invoice_id: Invoice ID
+        current_user: Current user (for role-based access control)
+        skip: Number of records to skip
+        limit: Maximum number of records to return
+        event_category: Filter by event category
+        from_date: Filter by date from
+        to_date: Filter by date to
+        
+    Returns:
+        List[InvoiceHistory]: List of history events
+    """
+    # First verify user has access to the invoice
+    invoice = get_invoice(db, invoice_id, current_user)
+    if not invoice:
+        return []
+    
+    # Build query with joins to get user information
+    query = db.query(InvoiceHistory).options(
+        joinedload(InvoiceHistory.user),
+        joinedload(InvoiceHistory.invoice)
+    ).filter(InvoiceHistory.invoice_id == invoice_id)
+    
+    # Apply filters
+    if event_category:
+        query = query.filter(InvoiceHistory.event_category == event_category)
+    
+    if from_date:
+        query = query.filter(InvoiceHistory.created_at >= datetime.combine(from_date, datetime.min.time()))
+    
+    if to_date:
+        query = query.filter(InvoiceHistory.created_at <= datetime.combine(to_date, datetime.max.time()))
+    
+    # Order by created_at descending (newest first) and apply pagination
+    return query.order_by(InvoiceHistory.created_at.desc()).offset(skip).limit(limit).all()
+
+
+def count_invoice_history(
+    db: Session,
+    invoice_id: int,
+    current_user: User,
+    event_category: Optional[str] = None,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None
+) -> int:
+    """
+    Count total invoice history events for pagination
+    
+    Args:
+        db: Database session
+        invoice_id: Invoice ID
+        current_user: Current user (for role-based access control)
+        event_category: Filter by event category
+        from_date: Filter by date from
+        to_date: Filter by date to
+        
+    Returns:
+        int: Total count of history events
+    """
+    # First verify user has access to the invoice
+    invoice = get_invoice(db, invoice_id, current_user)
+    if not invoice:
+        return 0
+    
+    # Build query
+    query = db.query(InvoiceHistory).filter(InvoiceHistory.invoice_id == invoice_id)
+    
+    # Apply filters
+    if event_category:
+        query = query.filter(InvoiceHistory.event_category == event_category)
+    
+    if from_date:
+        query = query.filter(InvoiceHistory.created_at >= datetime.combine(from_date, datetime.min.time()))
+    
+    if to_date:
+        query = query.filter(InvoiceHistory.created_at <= datetime.combine(to_date, datetime.max.time()))
+    
+    return query.count()
