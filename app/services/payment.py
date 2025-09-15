@@ -15,7 +15,7 @@ from app.models.package import Package
 from app.models.quote import Quote, QuoteItem
 from app.models.user import User
 from app.schemas.payment import (
-    InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate,
+    InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceNotesUpdate,
     PaymentCreate, PaymentUpdate, PaymentStatusUpdate,
     QuoteToInvoiceRequest, InvoiceStatus, PaymentStatus
 )
@@ -421,6 +421,71 @@ def update_invoice_status(
         metadata={
             "old_status": old_status,
             "new_status": status_update.status
+        }
+    )
+    
+    return db_invoice
+
+
+def update_invoice_notes(
+    db: Session,
+    invoice_id: int,
+    notes_update: InvoiceNotesUpdate,
+    user_id: int
+) -> Invoice:
+    """
+    Update invoice notes only
+    
+    Args:
+        db: Database session
+        invoice_id: Invoice ID
+        notes_update: Notes update data
+        user_id: Current user ID for isolation
+        
+    Returns:
+        Invoice: Updated invoice
+        
+    Raises:
+        HTTPException: If invoice not found or validation fails
+    """
+    # Create a temporary user object for the internal call
+    from app.models.user import User
+    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
+    db_invoice = get_invoice(db, invoice_id, temp_user)
+    if not db_invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice not found"
+        )
+    
+    # Check if invoice can be modified
+    if db_invoice.status in ['paid', 'cancelled']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot modify invoice with status '{db_invoice.status}'"
+        )
+    
+    # Store old notes for history logging
+    old_notes = db_invoice.notes
+    
+    # Update notes field
+    db_invoice.notes = notes_update.notes
+    db_invoice.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(db_invoice)
+    
+    # Log history event for notes update
+    safe_log_invoice_history(
+        db=db,
+        invoice_id=db_invoice.id,
+        user_id=user_id,
+        event_type="notes_updated",
+        event_category="workflow",
+        description="Invoice notes updated",
+        metadata={
+            "old_notes": old_notes,
+            "new_notes": notes_update.notes
         }
     )
     

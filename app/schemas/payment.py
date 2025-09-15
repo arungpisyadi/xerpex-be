@@ -175,6 +175,11 @@ class InvoiceStatusUpdate(BaseModel):
     status: InvoiceStatus
 
 
+class InvoiceNotesUpdate(BaseModel):
+    """Invoice notes update schema"""
+    notes: Optional[str] = None
+
+
 class InvoiceResponse(InvoiceBase):
     """Invoice response schema"""
     id: int

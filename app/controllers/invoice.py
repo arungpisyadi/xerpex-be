@@ -9,14 +9,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.schemas.payment import (
-    InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceResponse,
+    InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceNotesUpdate, InvoiceResponse,
     InvoiceStatus, QuoteToInvoiceRequest, InvoiceListResponse,
     OverdueInvoicesResponse, OverdueInvoicesCheckResponse, InvoicePreviewResponse,
     InvoiceHistoryListResponse, InvoiceHistoryEventCategory
 )
 from app.services.payment import (
     get_invoice, get_invoice_by_number, get_invoices, create_invoice,
-    update_invoice, update_invoice_status, delete_invoice,
+    update_invoice, update_invoice_status, update_invoice_notes, delete_invoice,
     convert_quote_to_invoice, check_overdue_invoices, get_invoice_statistics,
     get_invoice_history, count_invoice_history
 )
@@ -258,6 +258,31 @@ async def update_invoice_status_endpoint(
             db=db,
             invoice_id=invoice_id,
             status_update=status_update,
+            user_id=current_user.id
+        )
+        return updated_invoice
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.patch("/{invoice_id}/notes", response_model=InvoiceResponse)
+async def update_invoice_notes_endpoint(
+    invoice_id: int,
+    notes_update: InvoiceNotesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update invoice notes only
+    """
+    try:
+        updated_invoice = update_invoice_notes(
+            db=db,
+            invoice_id=invoice_id,
+            notes_update=notes_update,
             user_id=current_user.id
         )
         return updated_invoice
