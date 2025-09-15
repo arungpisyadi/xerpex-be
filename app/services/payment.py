@@ -351,10 +351,10 @@ def update_invoice_status(
         user_id: Current user ID for isolation
         
     Returns:
-        Invoice: Updated invoice
+        Invoice: Updated invoice (with status changed only if transition is valid)
         
     Raises:
-        HTTPException: If invoice not found or invalid status transition
+        HTTPException: If invoice not found
     """
     # Create a temporary user object for the internal call
     from app.models.user import User
@@ -375,54 +375,72 @@ def update_invoice_status(
         'cancelled': ['draft']  # Can be reopened
     }
     
-    if status_update.status not in valid_transitions.get(db_invoice.status, []):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot change status from '{db_invoice.status}' to '{status_update.status}'"
+    status_value = status_update.status.value if hasattr(status_update.status, 'value') else str(status_update.status)
+    
+    # Check if transition is valid
+    valid_transition = status_value in valid_transitions.get(db_invoice.status, [])
+    
+    if valid_transition:
+        # Only update status if transition is valid
+        old_status = db_invoice.status
+        db_invoice.status = status_value
+        db_invoice.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(db_invoice)
+        
+        # Log history event for successful status change
+        event_type = "status_changed"
+        event_category = "status"
+        description = f"Invoice status changed from '{old_status}' to '{status_value}'"
+        
+        # Use more specific event types for workflow actions
+        if status_value == "sent":
+            event_type = "invoice_sent"
+            event_category = "workflow"
+            description = "Invoice sent to customer"
+        elif status_value == "cancelled":
+            event_type = "invoice_cancelled"
+            event_category = "workflow"
+            description = "Invoice cancelled"
+        elif status_value == "draft" and old_status == "cancelled":
+            event_type = "invoice_reopened"
+            event_category = "workflow"
+            description = "Invoice reopened from cancelled status"
+        elif status_value == "paid":
+            event_type = "fully_paid"
+            event_category = "payment"
+            description = "Invoice marked as fully paid"
+        
+        safe_log_invoice_history(
+            db=db,
+            invoice_id=db_invoice.id,
+            user_id=user_id,
+            event_type=event_type,
+            event_category=event_category,
+            description=description,
+            metadata={
+                "old_status": old_status,
+                "new_status": status_value
+            }
         )
-    
-    old_status = db_invoice.status
-    db_invoice.status = status_update.status
-    db_invoice.updated_at = datetime.utcnow()
-    
-    db.commit()
-    db.refresh(db_invoice)
-    
-    # Log history event for status change
-    event_type = "status_changed"
-    event_category = "status"
-    description = f"Invoice status changed from '{old_status}' to '{status_update.status}'"
-    
-    # Use more specific event types for workflow actions
-    if status_update.status == "sent":
-        event_type = "invoice_sent"
-        event_category = "workflow"
-        description = "Invoice sent to customer"
-    elif status_update.status == "cancelled":
-        event_type = "invoice_cancelled"
-        event_category = "workflow"
-        description = "Invoice cancelled"
-    elif status_update.status == "draft" and old_status == "cancelled":
-        event_type = "invoice_reopened"
-        event_category = "workflow"
-        description = "Invoice reopened from cancelled status"
-    elif status_update.status == "paid":
-        event_type = "fully_paid"
-        event_category = "payment"
-        description = "Invoice marked as fully paid"
-    
-    safe_log_invoice_history(
-        db=db,
-        invoice_id=db_invoice.id,
-        user_id=user_id,
-        event_type=event_type,
-        event_category=event_category,
-        description=description,
-        metadata={
-            "old_status": old_status,
-            "new_status": status_update.status
-        }
-    )
+    else:
+        # Invalid transition: keep current status, skip status update
+        # Don't throw exception - allow process to continue for email sending
+        # Log attempted invalid transition
+        safe_log_invoice_history(
+            db=db,
+            invoice_id=db_invoice.id,
+            user_id=user_id,
+            event_type="invalid_status_transition_attempted",
+            event_category="workflow",
+            description=f"Invalid status transition attempted from '{db_invoice.status}' to '{status_value}' - status unchanged",
+            metadata={
+                "attempted_status": status_value,
+                "current_status": db_invoice.status,
+                "valid_transitions": valid_transitions.get(db_invoice.status, [])
+            }
+        )
     
     return db_invoice
 

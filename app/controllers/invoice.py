@@ -21,6 +21,7 @@ from app.services.payment import (
     get_invoice_history, count_invoice_history
 )
 from app.services.settings import get_general_settings
+from app.services.email import send_invoice_email
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -322,17 +323,80 @@ async def send_invoice(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Send an invoice (change status from draft to sent)
+    Send an invoice (change status from draft to sent and email to customer)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     status_update = InvoiceStatusUpdate(status=InvoiceStatus.sent)
     try:
+        # First update the invoice status
         updated_invoice = update_invoice_status(
             db=db,
             invoice_id=invoice_id,
             status_update=status_update,
             user_id=current_user.id
         )
+        
+        # Then attempt to send email to customer
+        try:
+            # Check if customer has email
+            if updated_invoice.customer and updated_invoice.customer.email:
+                # Get company information from settings
+                settings = get_general_settings(db)
+                company_info = {
+                    "name": settings.company_name if settings else "Your Company",
+                    "email": settings.company_email if settings else current_user.email
+                }
+                
+                # Prepare invoice data for email
+                invoice_data = {
+                    "invoice_number": updated_invoice.invoice_number,
+                    "total": float(updated_invoice.total),
+                    "amount_due": float(updated_invoice.amount_due),
+                    "status": updated_invoice.status,
+                    "issue_date": updated_invoice.issue_date,
+                    "due_date": updated_invoice.due_date,
+                    "formatted_issue_date": updated_invoice.issue_date.strftime("%B %d, %Y"),
+                    "formatted_due_date": updated_invoice.due_date.strftime("%B %d, %Y"),
+                    "payment_terms": updated_invoice.payment_terms,
+                    "notes": updated_invoice.notes,
+                    "items": []
+                }
+                
+                # Add invoice items if available
+                if updated_invoice.items:
+                    for item in updated_invoice.items:
+                        invoice_data["items"].append({
+                            "package": {
+                                "name": item.package.name if item.package else "Service"
+                            },
+                            "unit_price": float(item.unit_price),
+                            "discount": float(item.discount),
+                            "line_total": float(item.line_total)
+                        })
+                
+                # Send the invoice email
+                email_sent = await send_invoice_email(
+                    customer_email=updated_invoice.customer.email,
+                    customer_name=updated_invoice.customer.name,
+                    invoice_data=invoice_data,
+                    company_info=company_info
+                )
+                
+                if email_sent:
+                    logger.info(f"Invoice #{updated_invoice.invoice_number} successfully sent via email to {updated_invoice.customer.email}")
+                else:
+                    logger.warning(f"Invoice #{updated_invoice.invoice_number} status updated but email sending failed")
+            else:
+                logger.warning(f"Invoice #{updated_invoice.invoice_number} status updated but customer has no email address")
+                
+        except Exception as email_error:
+            # Log email error but don't fail the entire operation since status was updated successfully
+            logger.error(f"Failed to send invoice email for invoice #{updated_invoice.invoice_number}: {str(email_error)}")
+        
         return updated_invoice
+        
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
