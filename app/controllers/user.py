@@ -41,7 +41,7 @@ async def read_users(
         List[User]: List of users
     """
     # Only admin and manager can list all users
-    if current_user.role not in ["admin", "manager"]:
+    if current_user.role not in ["admin", "manager", "sales"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
@@ -102,7 +102,7 @@ async def read_user(
         HTTPException: If user not found or not enough permissions
     """
     # Users can only see their own profile unless they are admin or manager
-    if current_user.id != user_id and current_user.role not in ["admin", "manager"]:
+    if current_user.id != user_id and current_user.role not in ["admin", "manager", "sales"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
