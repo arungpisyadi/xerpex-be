@@ -5,6 +5,7 @@ from typing import List, Optional
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User
@@ -17,8 +18,14 @@ from app.schemas.quote import (
 from app.services.quote import (
     get_quote, get_quotes, create_quote, update_quote, update_quote_status,
     delete_quote, calculate_quote_totals, get_quote_statistics,
-    check_expired_quotes
+    check_expired_quotes, update_quote_notes
 )
+
+
+# Simple schema for notes-only updates
+class QuoteNotesUpdate(BaseModel):
+    """Quote notes update schema"""
+    notes: Optional[str] = None
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
@@ -210,6 +217,31 @@ async def update_quote_status_endpoint(
             quote_id=quote_id,
             status_update=status_update,
             user_id=current_user.id
+        )
+        return updated_quote
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.patch("/{quote_id}/notes", response_model=Quote)
+async def update_quote_notes_endpoint(
+    quote_id: int,
+    notes_update: QuoteNotesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update quote notes only
+    """
+    try:
+        updated_quote = update_quote_notes(
+            db=db,
+            quote_id=quote_id,
+            notes=notes_update.notes,
+            current_user=current_user
         )
         return updated_quote
     except ValueError as e:

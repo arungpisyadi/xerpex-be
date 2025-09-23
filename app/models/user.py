@@ -31,7 +31,8 @@ class User(Base):
     # Invoicing system relationships
     customers = relationship("Customer", back_populates="user", cascade="all, delete-orphan")
     taxes = relationship("Tax", back_populates="user", cascade="all, delete-orphan")
-    quotes = relationship("Quote", back_populates="user", cascade="all, delete-orphan")
+    quotes = relationship("Quote", foreign_keys="Quote.user_id", back_populates="user", cascade="all, delete-orphan")
+    sales_person_quotes = relationship("Quote", foreign_keys="Quote.sales_person_id", back_populates="sales_person", cascade="all, delete-orphan")
     invoices = relationship("Invoice", foreign_keys="Invoice.user_id", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
     packages = relationship("Package", back_populates="user", cascade="all, delete-orphan")

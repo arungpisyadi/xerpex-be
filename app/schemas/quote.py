@@ -3,13 +3,20 @@ Quote schemas for the XerpeX ERP System
 """
 from datetime import datetime, date
 from typing import Optional, List, Literal
-from pydantic import BaseModel, condecimal, validator
+from enum import Enum
+from pydantic import BaseModel, condecimal, validator, Field
 from app.schemas.customer import Customer
 from app.schemas.package import Package
 
 
-# Quote status type
-QuoteStatus = Literal["draft", "sent", "accepted", "declined", "expired"]
+# Quote status enum
+class QuoteStatus(str, Enum):
+    """Quote status enumeration"""
+    draft = "draft"
+    sent = "sent"
+    accepted = "accepted"
+    declined = "declined"
+    expired = "expired"
 
 
 class QuoteItemBase(BaseModel):
@@ -69,6 +76,8 @@ class QuoteBase(BaseModel):
     status: QuoteStatus = "draft"
     total: condecimal(max_digits=10, decimal_places=2) = 0.00
     tax_total: condecimal(max_digits=10, decimal_places=2) = 0.00
+    notes: Optional[str] = None
+    sales_person_id: Optional[int] = None
 
     @validator('expiry_date')
     def validate_expiry_date(cls, v, values):
@@ -90,6 +99,8 @@ class QuoteUpdate(BaseModel):
     status: Optional[QuoteStatus] = None
     total: Optional[condecimal(max_digits=10, decimal_places=2)] = None
     tax_total: Optional[condecimal(max_digits=10, decimal_places=2)] = None
+    notes: Optional[str] = None
+    sales_person_id: Optional[int] = None
     items: Optional[List[QuoteItemCreate]] = None
 
     @validator('expiry_date')
@@ -112,6 +123,7 @@ class QuoteInDB(QuoteBase):
     quote_number: str
     created_at: datetime
     updated_at: datetime
+    sales_person_id: Optional[int] = None
 
     class Config:
         """Pydantic config"""
@@ -151,8 +163,10 @@ class QuoteSummary(BaseModel):
 
 class QuoteConversionRequest(BaseModel):
     """Schema for converting quote to invoice"""
-    payment_terms: Optional[str] = None
+    issue_date: Optional[date] = Field(default_factory=date.today)  # Date of conversion
     due_date: Optional[date] = None
+    payment_terms: Optional[str] = None
+    notes: Optional[str] = None
 
     @validator('due_date')
     def validate_due_date(cls, v):

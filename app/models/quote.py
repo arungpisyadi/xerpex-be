@@ -2,7 +2,7 @@
 Quote models for the XerpeX ERP System
 """
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, ForeignKey, CheckConstraint
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, Numeric, ForeignKey, CheckConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -15,18 +15,21 @@ class Quote(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    sales_person_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     quote_number = Column(String(50), unique=True, nullable=False, index=True)
     issue_date = Column(Date, nullable=False, default=date.today)
     expiry_date = Column(Date, nullable=False)
     status = Column(String(20), nullable=False, default="draft")
+    notes = Column(Text, nullable=True)
     total = Column(Numeric(10, 2), nullable=False, default=0.00)
     tax_total = Column(Numeric(10, 2), nullable=False, default=0.00)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    user = relationship("User", back_populates="quotes")
+    user = relationship("User", foreign_keys="Quote.user_id", back_populates="quotes")
     customer = relationship("Customer", back_populates="quotes")
+    sales_person = relationship("User", foreign_keys=[sales_person_id], back_populates="sales_person_quotes")
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
     invoices = relationship("Invoice", back_populates="quote")
     

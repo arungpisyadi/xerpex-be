@@ -114,15 +114,15 @@ def get_quotes(
 def create_quote(db: Session, quote: QuoteCreate, current_user: User) -> Quote:
     """
     Create a new quote with items
-    
+
     Args:
         db: Database session
         quote: Quote data
         current_user: Current user (for role-based access control)
-        
+
     Returns:
         Quote: Created quote
-        
+
     Raises:
         HTTPException: If customer not found or validation fails
     """
@@ -133,22 +133,33 @@ def create_quote(db: Session, quote: QuoteCreate, current_user: User) -> Quote:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found"
         )
-    
+
+    # Validate sales_person_id if provided
+    if quote.sales_person_id:
+        sales_person = db.query(User).filter(User.id == quote.sales_person_id).first()
+        if not sales_person:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sales person not found"
+            )
+
     # Generate quote number
     quote_number = generate_quote_number()
-    
+
     # Ensure quote number is unique
     while db.query(Quote).filter(Quote.quote_number == quote_number).first():
         quote_number = generate_quote_number()
-    
+
     # Create quote
     db_quote = Quote(
         user_id=current_user.id,
         customer_id=quote.customer_id,
+        sales_person_id=quote.sales_person_id,
         quote_number=quote_number,
         issue_date=quote.issue_date,
         expiry_date=quote.expiry_date,
         status=quote.status,
+        notes=quote.notes,
         total=Decimal('0.00'),
         tax_total=Decimal('0.00'),
         created_at=datetime.utcnow(),
@@ -251,6 +262,15 @@ def update_quote(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Customer not found"
             )
+
+    # Validate sales_person_id if being updated
+    if 'sales_person_id' in update_data and update_data['sales_person_id'] is not None:
+        sales_person = db.query(User).filter(User.id == update_data['sales_person_id']).first()
+        if not sales_person:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sales person not found"
+            )
     
     for key, value in update_data.items():
         setattr(db_quote, key, value)
@@ -287,6 +307,52 @@ def update_quote(
         db_quote.total = total_amount
     
     db_quote.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_quote)
+    
+    return db_quote
+
+
+def update_quote_notes(
+    db: Session,
+    quote_id: int,
+    notes: Optional[str],
+    current_user: User
+) -> Quote:
+    """
+    Update quote notes with proper access control and business rules
+    
+    Args:
+        db: Database session
+        quote_id: Quote ID
+        notes: Notes value (None to clear notes)
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        Quote: Updated quote
+        
+    Raises:
+        HTTPException: If quote not found or validation fails
+    """
+    # Get quote with proper access control
+    db_quote = get_quote(db, quote_id, current_user)
+    if not db_quote:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quote not found"
+        )
+    
+    # Check if quote can be modified (same business rules as update_quote)
+    if db_quote.status in ['accepted', 'declined', 'expired']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot modify quote with status '{db_quote.status}'"
+        )
+    
+    # Update notes field
+    db_quote.notes = notes
+    db_quote.updated_at = datetime.utcnow()
+    
     db.commit()
     db.refresh(db_quote)
     
