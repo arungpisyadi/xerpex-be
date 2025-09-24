@@ -52,12 +52,27 @@ def get_user_by_username(db: Session, username: str) -> Optional[User]:
     return db.query(User).filter(User.username == username).first()
 
 
+def get_user_by_phone(db: Session, phone: str) -> Optional[User]:
+    """
+    Get a user by phone number
+    
+    Args:
+        db: Database session
+        phone: Phone number
+        
+    Returns:
+        User: User or None
+    """
+    return db.query(User).filter(User.phone == phone).first()
+
+
 def get_users(
-    db: Session, 
-    skip: int = 0, 
+    db: Session,
+    skip: int = 0,
     limit: int = 100,
     role: Optional[str] = None,
-    is_active: Optional[bool] = None
+    is_active: Optional[bool] = None,
+    phone: Optional[str] = None
 ) -> List[User]:
     """
     Get users with optional filtering
@@ -68,6 +83,7 @@ def get_users(
         limit: Maximum number of records to return
         role: Filter by role
         is_active: Filter by active status
+        phone: Filter by phone number (partial match)
         
     Returns:
         List[User]: List of users
@@ -79,6 +95,9 @@ def get_users(
     
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
+    
+    if phone:
+        query = query.filter(User.phone.ilike(f"%{phone}%"))
     
     return query.offset(skip).limit(limit).all()
 
@@ -114,11 +133,22 @@ def create_user(db: Session, user: UserCreate) -> User:
                 detail="Username already taken"
             )
     
+    # Check if phone number already exists (if provided)
+    if hasattr(user, 'phone') and user.phone:
+        # Phone is already sanitized by the schema validator
+        existing_phone_user = get_user_by_phone(db, user.phone)
+        if existing_phone_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already registered"
+            )
+    
     # Create new user
     hashed_password = get_password_hash(user.password)
     db_user = User(
         username=user.username,
         email=user.email,
+        phone=user.phone,
         password_hash=hashed_password,
         full_name=user.full_name,
         role=user.role,
@@ -174,8 +204,18 @@ def update_user(db: Session, user_id: int, user_update: UserUpdate) -> User:
                 detail="Username already taken"
             )
     
+    # Check if phone is being updated and is already taken
+    if hasattr(user_update, 'phone') and user_update.phone and user_update.phone != db_user.phone:
+        # Phone is already sanitized by the schema validator
+        existing_user = get_user_by_phone(db, user_update.phone)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already registered"
+            )
+    
     # Update user fields
-    update_data = user_update.dict(exclude_unset=True)
+    update_data = user_update.model_dump(exclude_unset=True)
     
     # Handle password update separately
     if "password" in update_data:

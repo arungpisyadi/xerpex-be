@@ -3,7 +3,9 @@ User schemas for the XerpeX ERP System
 """
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+
+from app.utils.helpers import sanitize_phone_number
 
 
 class UserBase(BaseModel):
@@ -13,6 +15,14 @@ class UserBase(BaseModel):
     full_name: Optional[str] = None
     role: str
     is_active: bool = True
+    phone: Optional[str] = None
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return sanitize_phone_number(v)
 
 
 class UserCreate(UserBase):
@@ -28,6 +38,14 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None
+    phone: Optional[str] = None
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return sanitize_phone_number(v)
 
 
 class UserInDB(UserBase):
