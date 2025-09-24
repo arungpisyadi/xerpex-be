@@ -174,7 +174,12 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    # Try to get user by username first (for backward compatibility with existing tokens)
+    user = db.query(User).filter(User.username == user_id).first()
+    
+    # If not found by username, try by ID (in case user_id is numeric)
+    if user is None and user_id.isdigit():
+        user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

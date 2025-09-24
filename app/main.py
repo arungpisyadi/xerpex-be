@@ -12,7 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
-from app.controllers import auth, user, villa, booking, payment, report, salesmen, survey, package
+from app.controllers import auth, user, villa, booking, payment, report, salesmen, survey, package, sales
 from app.controllers import customer, tax, quote, invoice, kpi
 from app.controllers import settings as app_settings
 from app.controllers import target
@@ -124,6 +124,7 @@ class SentryMiddleware(BaseHTTPMiddleware):
 # Include API routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(user.router, prefix=settings.API_V1_STR)
+app.include_router(sales.router, prefix=settings.API_V1_STR)
 app.include_router(villa.router, prefix=settings.API_V1_STR)
 app.include_router(booking.router, prefix=settings.API_V1_STR)
 app.include_router(payment.router, prefix=settings.API_V1_STR)

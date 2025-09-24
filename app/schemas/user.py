@@ -108,3 +108,13 @@ class UserListResponse(BaseModel):
 class UserResponse(User):
     """User response schema for API responses"""
     pass
+
+
+class SalesUserResponse(BaseModel):
+    """Minimal response schema for sales users list"""
+    id: int
+    full_name: Optional[str] = None
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True

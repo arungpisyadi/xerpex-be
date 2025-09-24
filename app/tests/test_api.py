@@ -96,6 +96,88 @@ def test_get_users(client: TestClient, admin_headers, user_headers):
     assert response.status_code == 403
 
 
+def test_get_sales_users(client: TestClient, user_headers, admin_headers, db: Session):
+    """Test get sales users endpoint"""
+    # Create test sales users
+    from app.models.user import User
+    from app.utils.security import get_password_hash
+    
+    # Create active sales user
+    active_sales_user = User(
+        username="sales1",
+        email="sales1@example.com",
+        full_name="Active Sales User",
+        password_hash=get_password_hash("password"),
+        role="sales",
+        is_active=True
+    )
+    db.add(active_sales_user)
+    
+    # Create inactive sales user (should not appear in results)
+    inactive_sales_user = User(
+        username="sales2",
+        email="sales2@example.com",
+        full_name="Inactive Sales User",
+        password_hash=get_password_hash("password"),
+        role="sales",
+        is_active=False
+    )
+    db.add(inactive_sales_user)
+    
+    # Create active non-sales user (should not appear in results)
+    admin_user = User(
+        username="admin1",
+        email="admin1@example.com",
+        full_name="Admin User",
+        password_hash=get_password_hash("password"),
+        role="admin",
+        is_active=True
+    )
+    db.add(admin_user)
+    
+    db.commit()
+    
+    # Test as regular user - should work since any authenticated user can access
+    response = client.get("/api/v1/users/sales", headers=user_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    
+    # Should only contain the active sales user
+    assert len(data) == 1
+    assert data[0]["id"] == active_sales_user.id
+    assert data[0]["full_name"] == "Active Sales User"
+    
+    # Verify response only contains id and full_name (SalesUserResponse schema)
+    for user in data:
+        assert "id" in user
+        assert "full_name" in user
+        assert len(user.keys()) == 2  # Should only have these two fields
+    
+    # Test as admin - should also work
+    response = client.get("/api/v1/users/sales", headers=admin_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == active_sales_user.id
+
+
+def test_get_sales_users_unauthorized(client: TestClient):
+    """Test get sales users endpoint without authentication"""
+    response = client.get("/api/v1/users/sales")
+    assert response.status_code == 401
+
+
+def test_get_sales_users_empty_result(client: TestClient, user_headers):
+    """Test get sales users endpoint when no sales users exist"""
+    response = client.get("/api/v1/users/sales", headers=user_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
 def test_get_user(client: TestClient, test_user, user_headers):
     """Test get user endpoint"""
     response = client.get(f"/api/v1/users/{test_user['id']}", headers=user_headers)
