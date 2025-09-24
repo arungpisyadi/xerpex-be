@@ -14,7 +14,7 @@ class Survey(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     client_name = Column(String(100), nullable=False)
-    email = Column(String(100), nullable=False)
+    email = Column(String(100), nullable=True)
     phone_number = Column(String(20))
     estimated_paxes = Column(Integer, nullable=False)
     villa_types = Column(Text)

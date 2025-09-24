@@ -139,7 +139,7 @@ async def create_survey(db: Session, survey: SurveyCreate) -> Survey:
     # Prepare survey data for email
     survey_data = {
         'client_name': db_survey.client_name,
-        'email': db_survey.email,
+        'email': db_survey.email if db_survey.email else 'N/A',
         'phone_number': db_survey.phone_number,
         'estimated_paxes': db_survey.estimated_paxes,
         'villa_types': db_survey.villa_types,
@@ -228,7 +228,7 @@ async def update_survey(db: Session, survey_id: int, survey_update: SurveyUpdate
         try:
             survey_data = {
                 'client_name': db_survey.client_name,
-                'email': db_survey.email,
+                'email': db_survey.email if db_survey.email else 'N/A',
                 'priority': db_survey.priority,
                 'follow_up_date': str(db_survey.follow_up_date) if db_survey.follow_up_date else None,
                 'visiting_date': str(db_survey.visiting_date) if db_survey.visiting_date else None,

@@ -32,7 +32,7 @@ class SurveyPriority(str, Enum):
 class SurveyBase(BaseModel):
     """Base survey schema"""
     client_name: str
-    email: EmailStr
+    email: Optional[EmailStr] = None
     phone_number: Optional[str] = None
     estimated_paxes: int
     villa_types: Optional[str] = None
