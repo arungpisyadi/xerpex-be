@@ -4,7 +4,7 @@ Survey controllers for the XerpeX ERP System
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -70,14 +70,16 @@ async def read_surveys(
 @router.post("", response_model=SurveySchema, status_code=status.HTTP_201_CREATED)
 async def create_new_survey(
     survey: SurveyCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Create a new survey (triggers email notifications)
+    Create a new survey (email notifications sent in background)
     
     Args:
         survey: Survey data
+        background_tasks: FastAPI background tasks
         db: Database session
         current_user: Current user
         
@@ -85,7 +87,7 @@ async def create_new_survey(
         Survey: Created survey
     """
     # All authenticated users can create surveys
-    return await create_survey(db=db, survey=survey)
+    return await create_survey(db=db, survey=survey, background_tasks=background_tasks)
 
 
 @router.get("/overdue", response_model=List[SurveySchema])

@@ -1,11 +1,12 @@
 """
 Survey services for the XerpeX ERP System
 """
+import asyncio
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from collections import defaultdict
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_
 
@@ -17,6 +18,10 @@ from app.services.email import (
     send_survey_notification_to_admin,
     send_survey_status_update_notification,
     send_survey_notification_to_sales_team
+)
+from app.services.survey_background_tasks import (
+    create_survey_email_job,
+    process_survey_email_notifications
 )
 from app.config import settings
 def get_survey(db: Session, survey_id: int) -> Optional[Survey]:
@@ -101,13 +106,14 @@ def get_surveys(
     return query.order_by(Survey.created_at.desc()).offset(skip).limit(limit).all()
 
 
-async def create_survey(db: Session, survey: SurveyCreate) -> Survey:
+async def create_survey(db: Session, survey: SurveyCreate, background_tasks: Optional[BackgroundTasks] = None) -> Survey:
     """
-    Create a new survey and send notifications
+    Create a new survey and queue email notifications in background
     
     Args:
         db: Database session
         survey: Survey data
+        background_tasks: Optional FastAPI background tasks
         
     Returns:
         Survey: Created survey
@@ -133,51 +139,18 @@ async def create_survey(db: Session, survey: SurveyCreate) -> Survey:
     db.commit()
     db.refresh(db_survey)
     
-    # Load salesman details for notifications
+    # Load salesman details for the response
     db_survey = get_survey(db, db_survey.id)
     
-    # Prepare survey data for email
-    survey_data = {
-        'client_name': db_survey.client_name,
-        'email': db_survey.email if db_survey.email else 'N/A',
-        'phone_number': db_survey.phone_number,
-        'estimated_paxes': db_survey.estimated_paxes,
-        'villa_types': db_survey.villa_types,
-        'notes': db_survey.notes,
-        'status': db_survey.status,
-        'priority': db_survey.priority,
-        'follow_up_date': str(db_survey.follow_up_date) if db_survey.follow_up_date else None,
-        'visiting_date': str(db_survey.visiting_date) if db_survey.visiting_date else None,
-    }
+    # Create email job for background processing
+    create_survey_email_job(db, db_survey.id)
     
-    # Send notifications
-    try:
-        # Send to salesman if not default (ID != 1) and salesman exists
-        if db_survey.salesmen_id != 1 and db_survey.salesman:
-            await send_survey_notification_to_salesman(
-                salesman_email=db_survey.salesman.email,
-                salesman_name=db_survey.salesman.full_name,
-                survey_data=survey_data
-            )
-        
-        # Send to admin if configured
-        if settings.ADMIN_EMAIL:
-            await send_survey_notification_to_admin(
-                admin_email=settings.ADMIN_EMAIL,
-                survey_data=survey_data,
-                salesman_name=db_survey.salesman.full_name if db_survey.salesman else "Default Salesman"
-            )
-        
-        # Send to sales team (admin and director) if configured
-        await send_survey_notification_to_sales_team(
-            sales_admin_email=settings.SALES_ADMIN_EMAIL,
-            sales_director_email=settings.SALES_DIRECTOR_EMAIL,
-            survey_data=survey_data,
-            salesman_name=db_survey.salesman.full_name if db_survey.salesman else "Default Salesman"
-        )
-    except Exception as e:
-        # Log error but don't fail the survey creation
-        print(f"Failed to send email notifications: {str(e)}")
+    # Queue background task for email notifications
+    if background_tasks:
+        background_tasks.add_task(process_survey_email_notifications, db_survey.id)
+    else:
+        # If no background_tasks provided, run in asyncio task (fire and forget)
+        asyncio.create_task(process_survey_email_notifications(db_survey.id))
     
     return db_survey
 

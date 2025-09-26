@@ -18,6 +18,7 @@ from app.controllers import settings as app_settings
 from app.controllers import target
 from app.database import get_db
 from app.services.target import TargetService
+from app.services.survey_background_tasks import retry_failed_email_jobs, cleanup_old_survey_jobs
 from app.utils.sentry import (
     capture_exception,
     capture_message,
@@ -61,12 +62,49 @@ async def monthly_target_recalculation():
     finally:
         db.close()
 
+# Define the email retry job
+async def retry_failed_survey_emails():
+    """Scheduled job to retry failed survey email notifications"""
+    try:
+        processed_count = await retry_failed_email_jobs(limit=50)
+        if processed_count > 0:
+            print(f"Retried {processed_count} failed survey email jobs")
+    except Exception as e:
+        print(f"Error in retry failed survey emails job: {str(e)}")
+
+# Define the cleanup job
+async def cleanup_old_survey_email_jobs():
+    """Scheduled job to cleanup old survey email jobs"""
+    try:
+        await cleanup_old_survey_jobs(days_old=30)
+        print("Cleaned up old survey email jobs")
+    except Exception as e:
+        print(f"Error in cleanup survey email jobs: {str(e)}")
+
 # Add the scheduled job to run at 2:00 AM on the 1st of every month
 scheduler.add_job(
     monthly_target_recalculation,
     trigger=CronTrigger(day=1, hour=2, minute=0),
     id="monthly_target_recalculation",
     name="Monthly Target Recalculation",
+    replace_existing=True
+)
+
+# Add the email retry job to run every 5 minutes
+scheduler.add_job(
+    retry_failed_survey_emails,
+    trigger=CronTrigger(minute="*/5"),
+    id="retry_failed_survey_emails",
+    name="Retry Failed Survey Emails",
+    replace_existing=True
+)
+
+# Add the cleanup job to run daily at 3:00 AM
+scheduler.add_job(
+    cleanup_old_survey_email_jobs,
+    trigger=CronTrigger(hour=3, minute=0),
+    id="cleanup_old_survey_email_jobs",
+    name="Cleanup Old Survey Email Jobs",
     replace_existing=True
 )
 

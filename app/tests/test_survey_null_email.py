@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.survey import Survey
 from app.models.salesmen import Salesmen
+from app.models.survey_job import SurveyJob
 from app.schemas.survey import SurveyCreate, SurveyUpdate, SurveyStatus, SurveyPriority
 from app.services.survey import create_survey, update_survey, get_survey
 
@@ -31,17 +32,13 @@ def test_salesman(db: Session):
 
 
 @pytest.mark.asyncio
-@patch('app.services.survey.send_survey_notification_to_salesman', new_callable=AsyncMock)
-@patch('app.services.survey.send_survey_notification_to_admin', new_callable=AsyncMock)
-@patch('app.services.survey.send_survey_notification_to_sales_team', new_callable=AsyncMock)
+@patch('app.services.survey_background_tasks.process_survey_email_notifications', new_callable=AsyncMock)
 async def test_create_survey_with_null_email(
-    mock_sales_team_notification,
-    mock_admin_notification,
-    mock_salesman_notification,
+    mock_background_process,
     db: Session,
     test_salesman
 ):
-    """Test creating a survey with null email field"""
+    """Test creating a survey with null email field - background task approach"""
     # Create survey data without email
     survey_data = SurveyCreate(
         client_name="Test Client",
@@ -68,36 +65,25 @@ async def test_create_survey_with_null_email(
     assert created_survey.phone_number == "1234567890"
     assert created_survey.salesmen_id == test_salesman.id
     
-    # Verify notifications were called with proper data
-    # Check that email field in notification data is handled correctly
-    if mock_salesman_notification.called:
-        call_args = mock_salesman_notification.call_args
-        survey_data_arg = call_args[1]['survey_data']
-        assert survey_data_arg['email'] == 'N/A'  # Should be converted to 'N/A'
+    # Verify that a survey job was created
+    survey_job = db.query(SurveyJob).filter(SurveyJob.survey_id == created_survey.id).first()
+    assert survey_job is not None
+    assert survey_job.status == 'pending'
+    assert survey_job.survey_id == created_survey.id
     
-    if mock_admin_notification.called:
-        call_args = mock_admin_notification.call_args
-        survey_data_arg = call_args[1]['survey_data']
-        assert survey_data_arg['email'] == 'N/A'  # Should be converted to 'N/A'
-    
-    if mock_sales_team_notification.called:
-        call_args = mock_sales_team_notification.call_args
-        survey_data_arg = call_args[1]['survey_data']
-        assert survey_data_arg['email'] == 'N/A'  # Should be converted to 'N/A'
+    # Verify background task was called (due to asyncio.create_task call)
+    # Note: In the new implementation, the background task is triggered automatically
+    # The mock might not be called if asyncio.create_task is used instead of background_tasks
 
 
 @pytest.mark.asyncio
-@patch('app.services.survey.send_survey_notification_to_salesman', new_callable=AsyncMock)
-@patch('app.services.survey.send_survey_notification_to_admin', new_callable=AsyncMock)
-@patch('app.services.survey.send_survey_notification_to_sales_team', new_callable=AsyncMock)
+@patch('app.services.survey_background_tasks.process_survey_email_notifications', new_callable=AsyncMock)
 async def test_create_survey_with_valid_email(
-    mock_sales_team_notification,
-    mock_admin_notification,
-    mock_salesman_notification,
+    mock_background_process,
     db: Session,
     test_salesman
 ):
-    """Test creating a survey with valid email field"""
+    """Test creating a survey with valid email field - background task approach"""
     # Create survey data with valid email
     survey_data = SurveyCreate(
         client_name="Test Client",
@@ -123,22 +109,11 @@ async def test_create_survey_with_valid_email(
     assert created_survey.email == "client@test.com"
     assert created_survey.phone_number == "1234567890"
     
-    # Verify notifications were called with proper data
-    # Check that email field in notification data preserves the valid email
-    if mock_salesman_notification.called:
-        call_args = mock_salesman_notification.call_args
-        survey_data_arg = call_args[1]['survey_data']
-        assert survey_data_arg['email'] == 'client@test.com'
-    
-    if mock_admin_notification.called:
-        call_args = mock_admin_notification.call_args
-        survey_data_arg = call_args[1]['survey_data']
-        assert survey_data_arg['email'] == 'client@test.com'
-    
-    if mock_sales_team_notification.called:
-        call_args = mock_sales_team_notification.call_args
-        survey_data_arg = call_args[1]['survey_data']
-        assert survey_data_arg['email'] == 'client@test.com'
+    # Verify that a survey job was created
+    survey_job = db.query(SurveyJob).filter(SurveyJob.survey_id == created_survey.id).first()
+    assert survey_job is not None
+    assert survey_job.status == 'pending'
+    assert survey_job.survey_id == created_survey.id
 
 
 @pytest.mark.asyncio
@@ -164,10 +139,8 @@ async def test_update_survey_status_with_null_email(
         salesmen_id=test_salesman.id
     )
     
-    # Create survey without calling notifications (patch them)
-    with patch('app.services.survey.send_survey_notification_to_salesman', new_callable=AsyncMock), \
-         patch('app.services.survey.send_survey_notification_to_admin', new_callable=AsyncMock), \
-         patch('app.services.survey.send_survey_notification_to_sales_team', new_callable=AsyncMock):
+    # Create survey without calling notifications (patch background task)
+    with patch('app.services.survey_background_tasks.process_survey_email_notifications', new_callable=AsyncMock):
         created_survey = await create_survey(db, survey_data)
     
     # Update survey status
@@ -213,10 +186,8 @@ async def test_update_survey_status_with_valid_email(
         salesmen_id=test_salesman.id
     )
     
-    # Create survey without calling notifications (patch them)
-    with patch('app.services.survey.send_survey_notification_to_salesman', new_callable=AsyncMock), \
-         patch('app.services.survey.send_survey_notification_to_admin', new_callable=AsyncMock), \
-         patch('app.services.survey.send_survey_notification_to_sales_team', new_callable=AsyncMock):
+    # Create survey without calling notifications (patch background task)
+    with patch('app.services.survey_background_tasks.process_survey_email_notifications', new_callable=AsyncMock):
         created_survey = await create_survey(db, survey_data)
     
     # Update survey status

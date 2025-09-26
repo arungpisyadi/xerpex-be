@@ -29,6 +29,7 @@ class Survey(Base):
     
     # Relationships
     salesman = relationship("Salesmen", back_populates="surveys")
+    survey_jobs = relationship("SurveyJob", back_populates="survey", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (
