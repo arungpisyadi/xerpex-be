@@ -17,8 +17,10 @@ class Payment(Base):
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     payment_date = Column(Date, nullable=False, default=date.today)
-    payment_mode = Column(String(50), nullable=False)
+    payment_method = Column(String(50), nullable=False)
     reference_number = Column(String(50), nullable=True)
+    status = Column(String(20), nullable=False, default="pending")
+    notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -28,6 +30,10 @@ class Payment(Base):
     
     # Constraints
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'completed', 'failed', 'refunded')",
+            name="check_payment_status"
+        ),
         {"sqlite_autoincrement": True},  # For SQLite compatibility
     )
 

@@ -625,7 +625,7 @@ def get_payments(
         query = query.filter(Payment.status == status)
     
     if payment_method:
-        query = query.filter(Payment.payment_mode == payment_method)
+        query = query.filter(Payment.payment_method == payment_method)
     
     if from_date:
         query = query.filter(Payment.payment_date >= from_date)
