@@ -10,7 +10,7 @@ class VillaBase(BaseModel):
     """Base villa schema"""
     name: str
     description: Optional[str] = None
-    capacity: int
+    capacity: str
     room_type: str
     base_price: condecimal(max_digits=10, decimal_places=2)
     is_active: bool = True
@@ -25,7 +25,7 @@ class VillaUpdate(BaseModel):
     """Villa update schema"""
     name: Optional[str] = None
     description: Optional[str] = None
-    capacity: Optional[int] = None
+    capacity: Optional[str] = None
     room_type: Optional[str] = None
     base_price: Optional[condecimal(max_digits=10, decimal_places=2)] = None
     is_active: Optional[bool] = None

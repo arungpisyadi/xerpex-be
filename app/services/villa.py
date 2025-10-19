@@ -30,7 +30,7 @@ def get_villas(
     limit: int = 100,
     is_active: Optional[bool] = None,
     room_type: Optional[str] = None,
-    min_capacity: Optional[int] = None
+    min_capacity: Optional[str] = None
 ) -> List[Villa]:
     """
     Get villas with optional filtering
@@ -41,7 +41,7 @@ def get_villas(
         limit: Maximum number of records to return
         is_active: Filter by active status
         room_type: Filter by room type
-        min_capacity: Filter by minimum capacity
+        min_capacity: Filter by minimum capacity (as string)
         
     Returns:
         List[Villa]: List of villas

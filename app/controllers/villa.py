@@ -30,7 +30,7 @@ async def read_villas(
     limit: int = 100,
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     room_type: Optional[str] = Query(None, description="Filter by room type"),
-    min_capacity: Optional[int] = Query(None, description="Filter by minimum capacity"),
+    min_capacity: Optional[str] = Query(None, description="Filter by minimum capacity"),
     db: Session = Depends(get_db)
 ):
     """

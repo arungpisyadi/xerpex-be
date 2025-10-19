@@ -15,7 +15,7 @@ class Villa(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text)
-    capacity = Column(Integer, nullable=False)
+    capacity = Column(String(255), nullable=False)
     room_type = Column(String(50), nullable=False)
     base_price = Column(Numeric(10, 2), nullable=False)
     is_active = Column(Boolean, default=True)
