@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import Token, UserCreate, UserResponse, UserLogin
-from app.services.auth import authenticate_user, create_user, log_user_login, generate_token
+from app.schemas.auth import Token, UserCreate, UserResponse, UserLogin, UpdatePersonalInfo, UpdatePassword
+from app.services.auth import authenticate_user, create_user, log_user_login, generate_token, update_personal_info, update_password
 from app.utils.security import get_current_active_user
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -173,3 +173,60 @@ async def get_current_user_info(
         UserResponse: Current user info
     """
     return current_user
+
+
+@router.put("/profile/personal-info", response_model=UserResponse)
+async def update_user_personal_info(
+    update_data: UpdatePersonalInfo,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update current user's personal information
+    
+    This endpoint allows authenticated users to update their personal information
+    including full name, email, and phone number. At least one field must be provided.
+    Email and phone uniqueness will be validated.
+    
+    Args:
+        update_data: Personal information update data (full_name, email, phone)
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        UserResponse: Updated user information
+        
+    Raises:
+        HTTPException: If user not found, email already taken, phone already taken,
+                      or validation fails
+    """
+    return await update_personal_info(db, current_user.id, update_data)
+
+
+@router.put("/profile/password")
+async def update_user_password(
+    password_data: UpdatePassword,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update current user's password
+    
+    This endpoint allows authenticated users to change their password. The current
+    password must be provided and verified before the new password is set. The new
+    password must be at least 8 characters and different from the current password.
+    
+    Args:
+        password_data: Password update data (current_password, new_password)
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        dict: Success message
+        
+    Raises:
+        HTTPException: If user not found, current password is incorrect,
+                      or validation fails
+    """
+    await update_password(db, current_user.id, password_data)
+    return {"message": "Password updated successfully"}
