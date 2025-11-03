@@ -12,3 +12,4 @@ INVOICING_SYSTEM_IMPLEMENTATION_SPEC.md
 .kilocode/*
 test_invoice.json
 token.json
+test.db
