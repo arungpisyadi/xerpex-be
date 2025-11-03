@@ -193,6 +193,7 @@ def create_quote(db: Session, quote: QuoteCreate, current_user: User) -> Quote:
             package_id=item_data.package_id,
             unit_price=item_data.unit_price,
             discount=item_data.discount,
+            pax=item_data.pax,
             line_total=item_data.line_total,
             created_at=datetime.utcnow()
         )
@@ -296,6 +297,7 @@ def update_quote(
                 package_id=item_data.package_id,
                 unit_price=item_data.unit_price,
                 discount=item_data.discount,
+                pax=item_data.pax,
                 line_total=item_data.line_total,
                 created_at=datetime.utcnow()
             )

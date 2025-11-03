@@ -50,6 +50,7 @@ class QuoteItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     quote_id = Column(Integer, ForeignKey("quotes.id", ondelete="CASCADE"), nullable=False)
     package_id = Column(Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False)
+    pax = Column(Integer, nullable=False, default=1)
     unit_price = Column(Numeric(10, 2), nullable=False)
     discount = Column(Numeric(10, 2), nullable=False, default=0.00)
     line_total = Column(Numeric(10, 2), nullable=False)

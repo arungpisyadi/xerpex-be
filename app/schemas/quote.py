@@ -22,16 +22,15 @@ class QuoteStatus(str, Enum):
 class QuoteItemBase(BaseModel):
     """Base quote item schema"""
     package_id: int
-    unit_price: condecimal(max_digits=10, decimal_places=2)
-    discount: condecimal(max_digits=10, decimal_places=2) = 0.00
-    line_total: condecimal(max_digits=10, decimal_places=2)
+    unit_price: condecimal(max_digits=15, decimal_places=2)
+    discount: condecimal(max_digits=15, decimal_places=2) = 0.00
+    pax: int = 1
+    line_total: condecimal(max_digits=15, decimal_places=2)
 
-    @validator('line_total')
-    def validate_line_total(cls, v, values):
-        if 'unit_price' in values and 'discount' in values:
-            expected_total = values['unit_price'] - values['discount']
-            if abs(float(v) - float(expected_total)) > 0.01:  # Allow small floating point differences
-                raise ValueError('Line total must equal unit_price minus discount')
+    @validator('pax')
+    def validate_pax(cls, v):
+        if v < 1:
+            raise ValueError('pax must be at least 1')
         return v
 
 
@@ -43,9 +42,10 @@ class QuoteItemCreate(QuoteItemBase):
 class QuoteItemUpdate(BaseModel):
     """Quote item update schema"""
     package_id: Optional[int] = None
-    unit_price: Optional[condecimal(max_digits=10, decimal_places=2)] = None
-    discount: Optional[condecimal(max_digits=10, decimal_places=2)] = None
-    line_total: Optional[condecimal(max_digits=10, decimal_places=2)] = None
+    unit_price: Optional[condecimal(max_digits=15, decimal_places=2)] = None
+    discount: Optional[condecimal(max_digits=15, decimal_places=2)] = None
+    pax: Optional[int] = None
+    line_total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
 
 
 class QuoteItemInDB(QuoteItemBase):
@@ -74,8 +74,8 @@ class QuoteBase(BaseModel):
     issue_date: date
     expiry_date: date
     status: QuoteStatus = "draft"
-    total: condecimal(max_digits=10, decimal_places=2) = 0.00
-    tax_total: condecimal(max_digits=10, decimal_places=2) = 0.00
+    total: condecimal(max_digits=15, decimal_places=2) = 0.00
+    tax_total: condecimal(max_digits=15, decimal_places=2) = 0.00
     notes: Optional[str] = None
     sales_person_id: Optional[int] = None
 
@@ -97,8 +97,8 @@ class QuoteUpdate(BaseModel):
     issue_date: Optional[date] = None
     expiry_date: Optional[date] = None
     status: Optional[QuoteStatus] = None
-    total: Optional[condecimal(max_digits=10, decimal_places=2)] = None
-    tax_total: Optional[condecimal(max_digits=10, decimal_places=2)] = None
+    total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
+    tax_total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
     notes: Optional[str] = None
     sales_person_id: Optional[int] = None
     items: Optional[List[QuoteItemCreate]] = None
@@ -153,7 +153,7 @@ class QuoteSummary(BaseModel):
     issue_date: date
     expiry_date: date
     status: QuoteStatus
-    total: condecimal(max_digits=10, decimal_places=2)
+    total: condecimal(max_digits=15, decimal_places=2)
     created_at: datetime
 
     class Config:
@@ -189,9 +189,9 @@ class QuoteListResponse(BaseModel):
 
 class QuoteCalculationResponse(BaseModel):
     """Response schema for quote calculation endpoint"""
-    subtotal: condecimal(max_digits=10, decimal_places=2)
-    tax_total: condecimal(max_digits=10, decimal_places=2)
-    total: condecimal(max_digits=10, decimal_places=2)
+    subtotal: condecimal(max_digits=15, decimal_places=2)
+    tax_total: condecimal(max_digits=15, decimal_places=2)
+    total: condecimal(max_digits=15, decimal_places=2)
     taxes_applied: List[dict] = []
 
     class Config:
