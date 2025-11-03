@@ -2,74 +2,159 @@
 Booking models for the XerpeX ERP System
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Date, Text, Numeric, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Date, Text, Numeric, ForeignKey, CheckConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
 
 
 class Booking(Base):
-    """Booking model"""
+    """Booking model for accommodation booking system"""
     __tablename__ = "bookings"
     
+    # Primary Key
     id = Column(Integer, primary_key=True, index=True)
-    booking_code = Column(String(20), unique=True, nullable=False, index=True)
-    guest_name = Column(String(100), nullable=False)
-    guest_email = Column(String(100))
-    guest_phone = Column(String(20))
+    
+    # Foreign Keys
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    sales_person_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    # Booking Identifiers
+    booking_code = Column(String(50), unique=True, nullable=False, index=True)
+    
+    # Dates
     check_in = Column(Date, nullable=False)
     check_out = Column(Date, nullable=False)
-    total_pax = Column(Integer, nullable=False)
-    status = Column(String(20), nullable=False)
-    notes = Column(Text)
-    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    
+    # Status
+    status = Column(String(20), nullable=False, default="pending")
+    
+    # Additional Information
+    total_pax = Column(Integer, nullable=False, default=1)
+    notes = Column(Text, nullable=True)
+    
+    # Financial Fields
+    total = Column(Numeric(15, 2), nullable=False, default=0.00)
+    tax_total = Column(Numeric(15, 2), nullable=False, default=0.00)
+    amount_paid = Column(Numeric(15, 2), nullable=False, default=0.00)
+    amount_due = Column(Numeric(15, 2), nullable=False, default=0.00)
+    
+    # Audit Fields
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    user = relationship("User", foreign_keys=[user_id], back_populates="bookings")
+    customer = relationship("Customer", back_populates="bookings")
+    sales_person = relationship("User", foreign_keys=[sales_person_id], back_populates="sales_person_bookings")
+    items = relationship("BookingItem", back_populates="booking", cascade="all, delete-orphan")
     villas = relationship("BookingVilla", back_populates="booking", cascade="all, delete-orphan")
-    packages = relationship("BookingPackage", back_populates="booking", cascade="all, delete-orphan")
-    addons = relationship("BookingAddon", back_populates="booking", cascade="all, delete-orphan")
-    creator = relationship("User", foreign_keys=[created_by], back_populates="created_bookings")
+    history = relationship("BookingHistory", back_populates="booking", cascade="all, delete-orphan")
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'confirmed', 'checked_in', 'checked_out', 'completed', 'cancelled')",
+            name="check_booking_status"
+        ),
+        CheckConstraint(
+            "check_out > check_in",
+            name="check_booking_dates"
+        ),
+        {"sqlite_autoincrement": True},
+    )
+    
+    def __repr__(self):
+        return f"<Booking(id={self.id}, booking_code='{self.booking_code}', status='{self.status}')>"
+
+
+class BookingItem(Base):
+    """Booking item model for booking line items"""
+    __tablename__ = "booking_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
+    package_id = Column(Integer, ForeignKey("packages.id", ondelete="CASCADE"), nullable=False)
+    pax = Column(Integer, nullable=False, default=1)
+    unit_price = Column(Numeric(15, 2), nullable=False)
+    discount = Column(Numeric(15, 2), nullable=False, default=0.00)
+    line_total = Column(Numeric(15, 2), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    booking = relationship("Booking", back_populates="items")
+    package = relationship("Package", back_populates="booking_items")
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("pax >= 1", name="check_booking_item_pax"),
+        CheckConstraint("unit_price >= 0", name="check_booking_item_unit_price"),
+        CheckConstraint("discount >= 0", name="check_booking_item_discount"),
+        {"sqlite_autoincrement": True},
+    )
+    
+    def __repr__(self):
+        return f"<BookingItem(id={self.id}, booking_id={self.booking_id}, package_id={self.package_id}, pax={self.pax})>"
 
 
 class BookingVilla(Base):
-    """Booking villa model"""
+    """Booking villa model for villa assignments"""
     __tablename__ = "booking_villas"
     
     id = Column(Integer, primary_key=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
     villa_id = Column(Integer, ForeignKey("villas.id", ondelete="CASCADE"), nullable=False)
+    check_in = Column(Date, nullable=False)
+    check_out = Column(Date, nullable=False)
+    nightly_rate = Column(Numeric(15, 2), nullable=False)
+    total_nights = Column(Integer, nullable=False)
+    villa_total = Column(Numeric(15, 2), nullable=False)
     assigned_at = Column(DateTime, default=datetime.utcnow)
+    assigned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     # Relationships
     booking = relationship("Booking", back_populates="villas")
     villa = relationship("Villa", back_populates="bookings")
+    assigner = relationship("User", foreign_keys=[assigned_by])
+    
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("check_out > check_in", name="check_booking_villa_dates"),
+        CheckConstraint("nightly_rate >= 0", name="check_booking_villa_rate"),
+        {"sqlite_autoincrement": True},
+    )
+    
+    def __repr__(self):
+        return f"<BookingVilla(id={self.id}, booking_id={self.booking_id}, villa_id={self.villa_id}, nights={self.total_nights})>"
 
 
-class BookingPackage(Base):
-    """Booking package model"""
-    __tablename__ = "booking_packages"
+class BookingHistory(Base):
+    """Booking history model for audit trail"""
+    __tablename__ = "booking_history"
     
     id = Column(Integer, primary_key=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
-    package_name = Column(String(100), nullable=False)
-    package_price = Column(Numeric(10, 2), nullable=False)
-    notes = Column(Text)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    field_name = Column(String(100), nullable=False)
+    old_value = Column(Text, nullable=True)
+    new_value = Column(Text, nullable=True)
+    change_type = Column(String(50), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     
     # Relationships
-    booking = relationship("Booking", back_populates="packages")
-
-
-class BookingAddon(Base):
-    """Booking addon model"""
-    __tablename__ = "booking_addons"
+    booking = relationship("Booking", back_populates="history")
+    user = relationship("User")
     
-    id = Column(Integer, primary_key=True, index=True)
-    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
-    service_name = Column(String(100), nullable=False)
-    service_price = Column(Numeric(10, 2), nullable=False)
-    quantity = Column(Integer, default=1)
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "change_type IN ('created', 'status_change', 'field_update', 'item_added', " +
+            "'item_removed', 'villa_added', 'villa_removed', 'payment_received')",
+            name="check_booking_history_change_type"
+        ),
+        {"sqlite_autoincrement": True},
+    )
     
-    # Relationships
-    booking = relationship("Booking", back_populates="addons")
+    def __repr__(self):
+        return f"<BookingHistory(id={self.id}, booking_id={self.booking_id}, change_type='{self.change_type}')>"

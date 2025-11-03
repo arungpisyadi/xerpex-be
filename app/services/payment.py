@@ -212,6 +212,7 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
             package_id=item_data.package_id,
             unit_price=item_data.unit_price,
             discount=item_data.discount,
+            pax=item_data.pax,
             line_total=item_data.line_total,
             created_at=datetime.utcnow()
         )
@@ -287,7 +288,7 @@ def update_invoice(
     
     # Validate customer if being updated
     if 'customer_id' in update_data:
-        customer = get_customer(db, update_data['customer_id'], user_id)
+        customer = get_customer(db, update_data['customer_id'], temp_user)
         if not customer:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -318,6 +319,7 @@ def update_invoice(
                 package_id=item_data.package_id,
                 unit_price=item_data.unit_price,
                 discount=item_data.discount,
+                pax=item_data.pax,
                 line_total=item_data.line_total,
                 created_at=datetime.utcnow()
             )
@@ -952,6 +954,7 @@ def convert_quote_to_invoice(
             unit_price=quote_item.unit_price,
             discount=quote_item.discount,
             line_total=quote_item.line_total,
+            pax=quote_item.pax,
             created_at=datetime.utcnow()
         )
         db.add(invoice_item)

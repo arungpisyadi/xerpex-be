@@ -13,8 +13,8 @@ from app.schemas.villa import (
 )
 from app.schemas.booking import (
     BookingVillaBase, BookingVillaCreate, BookingVilla,
-    BookingPackageBase, BookingPackageCreate, BookingPackage,
-    BookingAddonBase, BookingAddonCreate, BookingAddon,
+    BookingItemBase, BookingItemCreate, BookingItemUpdate, BookingItem,
+    BookingHistoryBase, BookingHistory,
     BookingBase, BookingCreate, BookingUpdate, BookingStatusUpdate,
     Booking, BookingDetail
 )

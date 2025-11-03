@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.villa import Villa, VillaAvailability
-from app.models.booking import Booking, BookingVilla, BookingPackage, BookingAddon
+from app.models.booking import Booking, BookingVilla
 from app.models.payment import Payment, Invoice, InvoiceItem
 
 
@@ -70,30 +70,30 @@ def create_test_villa_availability(
 
 def create_test_booking(
     db: Session,
-    guest_name: str = "Test Guest",
-    guest_email: str = "guest@example.com",
-    guest_phone: str = "+1234567890",
+    customer_id: int = 1,
     check_in: date = date.today() + timedelta(days=7),
     check_out: date = date.today() + timedelta(days=10),
     total_pax: int = 2,
     status: str = "pending",
     notes: Optional[str] = None,
-    created_by: int = 1
+    user_id: int = 1
 ) -> Booking:
     """
     Create a test booking
     """
     booking = Booking(
+        user_id=user_id,
+        customer_id=customer_id,
         booking_code=f"BK{datetime.now().strftime('%y%m%d')}TEST",
-        guest_name=guest_name,
-        guest_email=guest_email,
-        guest_phone=guest_phone,
         check_in=check_in,
         check_out=check_out,
         total_pax=total_pax,
         status=status,
         notes=notes,
-        created_by=created_by,
+        total=Decimal('0.00'),
+        tax_total=Decimal('0.00'),
+        amount_paid=Decimal('0.00'),
+        amount_due=Decimal('0.00'),
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -106,14 +106,23 @@ def create_test_booking(
 def create_test_booking_villa(
     db: Session,
     booking_id: int,
-    villa_id: int
+    villa_id: int,
+    check_in: date = date.today() + timedelta(days=7),
+    check_out: date = date.today() + timedelta(days=10),
+    nightly_rate: Decimal = Decimal("1000000.00")
 ) -> BookingVilla:
     """
     Create a test booking villa
     """
+    total_nights = (check_out - check_in).days
     booking_villa = BookingVilla(
         booking_id=booking_id,
         villa_id=villa_id,
+        check_in=check_in,
+        check_out=check_out,
+        nightly_rate=nightly_rate,
+        total_nights=total_nights,
+        villa_total=nightly_rate * total_nights,
         assigned_at=datetime.utcnow()
     )
     db.add(booking_villa)
@@ -122,71 +131,29 @@ def create_test_booking_villa(
     return booking_villa
 
 
-def create_test_booking_package(
-    db: Session,
-    booking_id: int,
-    package_name: str = "Test Package",
-    package_price: Decimal = Decimal("500000.00"),
-    notes: Optional[str] = None
-) -> BookingPackage:
-    """
-    Create a test booking package
-    """
-    booking_package = BookingPackage(
-        booking_id=booking_id,
-        package_name=package_name,
-        package_price=package_price,
-        notes=notes
-    )
-    db.add(booking_package)
-    db.commit()
-    db.refresh(booking_package)
-    return booking_package
-
-
-def create_test_booking_addon(
-    db: Session,
-    booking_id: int,
-    service_name: str = "Test Addon",
-    service_price: Decimal = Decimal("200000.00"),
-    quantity: int = 1
-) -> BookingAddon:
-    """
-    Create a test booking addon
-    """
-    booking_addon = BookingAddon(
-        booking_id=booking_id,
-        service_name=service_name,
-        service_price=service_price,
-        quantity=quantity
-    )
-    db.add(booking_addon)
-    db.commit()
-    db.refresh(booking_addon)
-    return booking_addon
-
-
 def create_test_payment(
     db: Session,
-    booking_id: int,
+    invoice_id: int,
+    user_id: int = 1,
     amount: Decimal = Decimal("1000000.00"),
     payment_method: str = "bank_transfer",
-    payment_date: datetime = datetime.utcnow(),
+    payment_date: date = date.today(),
     status: str = "pending",
     notes: Optional[str] = None,
-    created_by: int = 1
+    reference_number: Optional[str] = None
 ) -> Payment:
     """
-    Create a test payment
+    Create a test payment linked to an invoice
     """
     payment = Payment(
-        booking_id=booking_id,
+        user_id=user_id,
+        invoice_id=invoice_id,
         amount=amount,
         payment_method=payment_method,
         payment_date=payment_date,
         status=status,
         notes=notes,
-        created_by=created_by,
+        reference_number=reference_number,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -199,22 +166,20 @@ def create_test_payment(
 def create_test_invoice(
     db: Session,
     booking_id: int,
-    guest_name: str = "Test Guest",
-    guest_email: str = "guest@example.com",
-    guest_phone: str = "+1234567890",
+    customer_id: int = 1,
     due_date: datetime = datetime.utcnow() + timedelta(days=7),
     total_amount: Decimal = Decimal("1000000.00"),
     status: str = "pending",
     notes: Optional[str] = None,
-    created_by: int = 1
+    user_id: int = 1
 ) -> Invoice:
     """
     Create a test invoice
     """
     invoice = Invoice(
         invoice_number=f"INV{datetime.now().strftime('%y%m%d')}TEST",
-        user_id=created_by,
-        customer_id=1,  # Assuming customer exists
+        user_id=user_id,
+        customer_id=customer_id,
         issue_date=datetime.utcnow(),
         due_date=due_date,
         status=status,
@@ -257,10 +222,11 @@ def create_test_invoice_item(
 def create_complete_test_booking(
     db: Session,
     user_id: int,
+    customer_id: int = 1,
     villa_id: Optional[int] = None
 ) -> Dict[str, Any]:
     """
-    Create a complete test booking with villa, package, addon, payment, and invoice
+    Create a complete test booking with villa, payment, and invoice
     """
     # Create villa if not provided
     if villa_id is None:
@@ -270,48 +236,35 @@ def create_complete_test_booking(
     # Create booking
     booking = create_test_booking(
         db,
-        guest_name="Complete Test Guest",
-        created_by=user_id
+        customer_id=customer_id,
+        user_id=user_id
     )
     
     # Add villa to booking
     booking_villa = create_test_booking_villa(db, booking.id, villa_id)
     
-    # Add package to booking
-    booking_package = create_test_booking_package(db, booking.id)
-    
-    # Add addon to booking
-    booking_addon = create_test_booking_addon(db, booking.id)
-    
     # Create invoice
     invoice = create_test_invoice(
         db,
         booking.id,
-        guest_name="Complete Test Guest",
-        created_by=user_id
+        customer_id=customer_id,
+        user_id=user_id
     )
     
     # Add invoice item
     invoice_item = create_test_invoice_item(db, invoice.id)
     
-    # Create payment
+    # Create payment linked to invoice
     payment = create_test_payment(
         db,
-        booking.id,
-        created_by=user_id
+        invoice_id=invoice.id,
+        user_id=user_id
     )
-    
-    # Link payment to invoice
-    payment.invoice_id = invoice.id
-    db.commit()
-    db.refresh(payment)
     
     return {
         "booking": booking,
         "villa": villa_id,
         "booking_villa": booking_villa,
-        "booking_package": booking_package,
-        "booking_addon": booking_addon,
         "invoice": invoice,
         "invoice_item": invoice_item,
         "payment": payment

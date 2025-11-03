@@ -28,6 +28,7 @@ class Package(Base):
     user = relationship("User", back_populates="packages")
     quote_items = relationship("QuoteItem", back_populates="package")
     invoice_items = relationship("InvoiceItem", back_populates="package")
+    booking_items = relationship("BookingItem", back_populates="package")
     
     # Constraints
     __table_args__ = (

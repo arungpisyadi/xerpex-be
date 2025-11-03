@@ -26,7 +26,8 @@ class User(Base):
     
     # Relationships
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
-    created_bookings = relationship("Booking", foreign_keys="Booking.created_by", back_populates="creator")
+    bookings = relationship("Booking", foreign_keys="Booking.user_id", back_populates="user", cascade="all, delete-orphan")
+    sales_person_bookings = relationship("Booking", foreign_keys="Booking.sales_person_id", back_populates="sales_person")
     updated_availabilities = relationship("VillaAvailability", back_populates="updated_by_user")
     
     # Invoicing system relationships

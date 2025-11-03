@@ -13,10 +13,9 @@ from app.services.villa import (
 )
 from app.services.booking import (
     get_booking, get_booking_by_code, get_bookings, create_booking, update_booking,
-    update_booking_status, delete_booking, get_booking_details,
-    add_booking_villa, remove_booking_villa,
-    add_booking_package, remove_booking_package,
-    add_booking_addon, remove_booking_addon
+    update_booking_status, delete_booking,
+    add_booking_item, update_booking_item, remove_booking_item,
+    add_booking_villa, update_booking_villa, remove_booking_villa
 )
 from app.services.payment import (
     get_payment, get_payments, create_payment, update_payment,

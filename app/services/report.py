@@ -510,7 +510,7 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
         recent_bookings_data.append({
             "id": booking.id,
             "booking_code": booking.booking_code,
-            "guest_name": booking.guest_name,
+            "customer_name": booking.customer.name if booking.customer else "N/A",
             "check_in": booking.check_in,
             "check_out": booking.check_out,
             "status": booking.status,

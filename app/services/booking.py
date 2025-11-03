@@ -4,67 +4,129 @@ Booking services for the XerpeX ERP System
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import List, Optional, Dict, Any, Tuple
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, or_, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.models.booking import Booking, BookingVilla, BookingPackage, BookingAddon
+from app.models.booking import Booking, BookingItem, BookingVilla, BookingHistory
 from app.models.payment import Payment
 from app.models.villa import Villa, VillaAvailability
+from app.models.customer import Customer
+from app.models.package import Package
+from app.models.user import User
 from app.schemas.booking import (
     BookingCreate, BookingUpdate, BookingStatusUpdate,
-    BookingVillaCreate, BookingPackageCreate, BookingAddonCreate
+    BookingItemCreate, BookingItemUpdate,
+    BookingVillaCreate, BookingStatus
 )
-from app.services.villa import get_villa, check_villa_availability
+from app.services.customer import get_customer
+from app.services.package import get_package
+from app.services.villa import get_villa
 from app.utils.helpers import generate_booking_code, calculate_nights
-def get_booking(db: Session, booking_id: int) -> Optional[Booking]:
+from app.utils.security import get_user_filter_condition, should_apply_user_isolation
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Core READ Operations
+# ============================================================================
+
+def get_booking(db: Session, booking_id: int, current_user: User) -> Optional[Booking]:
     """
-    Get a booking by ID
+    Get a booking by ID with role-based user isolation
     
     Args:
         db: Database session
         booking_id: Booking ID
+        current_user: Current user (for role-based access control)
         
     Returns:
         Booking: Booking or None
+        
+    Raises:
+        HTTPException: If booking not found or access denied
     """
-    return db.query(Booking).filter(Booking.id == booking_id).first()
+    try:
+        query = db.query(Booking).options(
+            joinedload(Booking.customer),
+            joinedload(Booking.items).joinedload(BookingItem.package),
+            joinedload(Booking.villas).joinedload(BookingVilla.villa)
+        ).filter(Booking.id == booking_id)
+        
+        # Apply user isolation based on role
+        user_filter = get_user_filter_condition(current_user, Booking.user_id)
+        if user_filter is not True:  # True means no filter (admin/finance)
+            query = query.filter(user_filter)
+        
+        return query.first()
+    except Exception as e:
+        logger.error(f"Error getting booking {booking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving booking: {str(e)}"
+        )
 
 
-def get_booking_by_code(db: Session, booking_code: str) -> Optional[Booking]:
+def get_booking_by_code(db: Session, booking_code: str, current_user: User) -> Optional[Booking]:
     """
-    Get a booking by code
+    Get a booking by code with role-based user isolation
     
     Args:
         db: Database session
         booking_code: Booking code
+        current_user: Current user (for role-based access control)
         
     Returns:
         Booking: Booking or None
     """
-    return db.query(Booking).filter(Booking.booking_code == booking_code).first()
+    try:
+        query = db.query(Booking).options(
+            joinedload(Booking.customer),
+            joinedload(Booking.items).joinedload(BookingItem.package),
+            joinedload(Booking.villas).joinedload(BookingVilla.villa)
+        ).filter(Booking.booking_code == booking_code)
+        
+        # Apply user isolation based on role
+        user_filter = get_user_filter_condition(current_user, Booking.user_id)
+        if user_filter is not True:
+            query = query.filter(user_filter)
+        
+        return query.first()
+    except Exception as e:
+        logger.error(f"Error getting booking by code {booking_code}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving booking: {str(e)}"
+        )
 
 
 def get_bookings(
     db: Session, 
+    current_user: User,
     skip: int = 0, 
     limit: int = 100,
-    status: Optional[str] = None,
-    guest_name: Optional[str] = None,
+    status: Optional[BookingStatus] = None,
+    customer_id: Optional[int] = None,
+    search: Optional[str] = None,
     check_in_from: Optional[date] = None,
     check_in_to: Optional[date] = None,
     villa_id: Optional[int] = None
 ) -> List[Booking]:
     """
-    Get bookings with optional filtering
+    Get bookings with optional filtering and search (role-based user isolation)
     
     Args:
         db: Database session
+        current_user: Current user (for role-based access control)
         skip: Number of records to skip
         limit: Maximum number of records to return
         status: Filter by status
-        guest_name: Filter by guest name
+        customer_id: Filter by customer ID
+        search: Search by booking code or customer name
         check_in_from: Filter by check-in date from
         check_in_to: Filter by check-in date to
         villa_id: Filter by villa ID
@@ -72,295 +134,801 @@ def get_bookings(
     Returns:
         List[Booking]: List of bookings
     """
-    query = db.query(Booking)
-    
-    if status:
-        query = query.filter(Booking.status == status)
-    
-    if guest_name:
-        query = query.filter(Booking.guest_name.ilike(f"%{guest_name}%"))
-    
-    if check_in_from:
-        query = query.filter(Booking.check_in >= check_in_from)
-    
-    if check_in_to:
-        query = query.filter(Booking.check_in <= check_in_to)
-    
-    if villa_id:
-        query = query.join(BookingVilla).filter(BookingVilla.villa_id == villa_id)
-    
-    return query.order_by(Booking.created_at.desc()).offset(skip).limit(limit).all()
+    try:
+        query = db.query(Booking).options(
+            joinedload(Booking.customer)
+        )
+        
+        # Apply user isolation based on role
+        user_filter = get_user_filter_condition(current_user, Booking.user_id)
+        if user_filter is not True:  # True means no filter (admin/finance)
+            query = query.filter(user_filter)
+        
+        # Apply filters
+        if status:
+            query = query.filter(Booking.status == status)
+        
+        if customer_id:
+            query = query.filter(Booking.customer_id == customer_id)
+        
+        if search:
+            query = query.join(Customer).filter(
+                or_(
+                    Booking.booking_code.ilike(f"%{search}%"),
+                    Customer.name.ilike(f"%{search}%")
+                )
+            )
+        
+        if check_in_from:
+            query = query.filter(Booking.check_in >= check_in_from)
+        
+        if check_in_to:
+            query = query.filter(Booking.check_in <= check_in_to)
+        
+        if villa_id:
+            query = query.join(BookingVilla).filter(BookingVilla.villa_id == villa_id)
+        
+        return query.order_by(Booking.created_at.desc()).offset(skip).limit(limit).all()
+    except Exception as e:
+        logger.error(f"Error getting bookings: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving bookings: {str(e)}"
+        )
 
 
-def create_booking(db: Session, booking: BookingCreate, current_user_id: int) -> Booking:
+# ============================================================================
+# Core CREATE Operations
+# ============================================================================
+
+def create_booking(db: Session, booking: BookingCreate, current_user: User) -> Booking:
     """
-    Create a new booking
+    Create a new booking with items and villas
     
     Args:
         db: Database session
         booking: Booking data
-        current_user_id: Current user ID
+        current_user: Current user (for role-based access control)
         
     Returns:
         Booking: Created booking
         
     Raises:
-        HTTPException: If villa not found or not available
+        HTTPException: If validation fails
     """
-    # Check if villas exist and are available
-    for villa_data in booking.villas:
-        villa = get_villa(db, villa_data.villa_id)
-        if not villa:
+    try:
+        # Validate customer exists and is accessible
+        customer = get_customer(db, booking.customer_id, current_user)
+        if not customer:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Villa with ID {villa_data.villa_id} not found"
+                detail="Customer not found"
             )
         
-        # Check availability
-        is_available, unavailable_dates = check_villa_availability(
-            db, villa_data.villa_id, booking.check_in, booking.check_out
-        )
-        
-        if not is_available:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Villa with ID {villa_data.villa_id} is not available for the selected dates"
-            )
-    
-    # Create booking
-    booking_code = generate_booking_code()
-    db_booking = Booking(
-        booking_code=booking_code,
-        guest_name=booking.guest_name,
-        guest_email=booking.guest_email,
-        guest_phone=booking.guest_phone,
-        check_in=booking.check_in,
-        check_out=booking.check_out,
-        total_pax=booking.total_pax,
-        status="pending",
-        notes=booking.notes,
-        created_by=current_user_id,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
-    
-    db.add(db_booking)
-    db.commit()
-    db.refresh(db_booking)
-    
-    # Add villas to booking
-    for villa_data in booking.villas:
-        db_booking_villa = BookingVilla(
-            booking_id=db_booking.id,
-            villa_id=villa_data.villa_id,
-            assigned_at=datetime.utcnow()
-        )
-        db.add(db_booking_villa)
-    
-    # Add packages to booking if provided
-    if booking.packages:
-        for package_data in booking.packages:
-            db_booking_package = BookingPackage(
-                booking_id=db_booking.id,
-                package_name=package_data.package_name,
-                package_price=package_data.package_price,
-                notes=package_data.notes
-            )
-            db.add(db_booking_package)
-    
-    # Add addons to booking if provided
-    if booking.addons:
-        for addon_data in booking.addons:
-            db_booking_addon = BookingAddon(
-                booking_id=db_booking.id,
-                service_name=addon_data.service_name,
-                service_price=addon_data.service_price,
-                quantity=addon_data.quantity
-            )
-            db.add(db_booking_addon)
-    
-    db.commit()
-    db.refresh(db_booking)
-    
-    # Update villa availability
-    for villa_data in booking.villas:
-        current_date = booking.check_in
-        while current_date < booking.check_out:
-            # Check if availability record exists
-            availability = db.query(VillaAvailability).filter(
-                VillaAvailability.villa_id == villa_data.villa_id,
-                VillaAvailability.date == current_date
-            ).first()
-            
-            if availability:
-                # Update existing record
-                availability.is_available = False
-                availability.blocked_reason = f"Booked (Booking Code: {booking_code})"
-                availability.updated_by = current_user_id
-                availability.updated_at = datetime.utcnow()
-            else:
-                # Create new record
-                db_availability = VillaAvailability(
-                    villa_id=villa_data.villa_id,
-                    date=current_date,
-                    is_available=False,
-                    blocked_reason=f"Booked (Booking Code: {booking_code})",
-                    updated_by=current_user_id,
-                    updated_at=datetime.utcnow()
+        # Validate sales_person_id if provided
+        if booking.sales_person_id:
+            sales_person = db.query(User).filter(User.id == booking.sales_person_id).first()
+            if not sales_person:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sales person not found"
                 )
-                db.add(db_availability)
+        
+        # Check if villas exist and are available
+        for villa_data in booking.villas:
+            villa = get_villa(db, villa_data.villa_id)
+            if not villa:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Villa with ID {villa_data.villa_id} not found"
+                )
             
-            current_date += timedelta(days=1)
-    
-    db.commit()
-    
-    return db_booking
-
-
-def update_booking(db: Session, booking_id: int, booking_update: BookingUpdate) -> Booking:
-    """
-    Update a booking
-    
-    Args:
-        db: Database session
-        booking_id: Booking ID
-        booking_update: Booking update data
-        
-    Returns:
-        Booking: Updated booking
-        
-    Raises:
-        HTTPException: If booking not found
-    """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
-        )
-    
-    # Update booking fields
-    update_data = booking_update.dict(exclude_unset=True)
-    
-    # Check if dates are being updated
-    if "check_in" in update_data or "check_out" in update_data:
-        check_in = update_data.get("check_in", db_booking.check_in)
-        check_out = update_data.get("check_out", db_booking.check_out)
-        
-        # Check availability for all villas
-        for booking_villa in db_booking.villas:
-            is_available, _ = check_villa_availability(
-                db, booking_villa.villa_id, check_in, check_out
+            # Check availability
+            is_available, unavailable_dates = check_villa_availability(
+                db, villa_data.villa_id, booking.check_in, booking.check_out
             )
             
             if not is_available:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Villa with ID {booking_villa.villa_id} is not available for the updated dates"
+                    detail=f"Villa with ID {villa_data.villa_id} is not available for the selected dates"
                 )
-    
-    for key, value in update_data.items():
-        setattr(db_booking, key, value)
-    
-    db_booking.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(db_booking)
-    
-    return db_booking
+        
+        # Generate unique booking code
+        booking_code = generate_booking_code()
+        while db.query(Booking).filter(Booking.booking_code == booking_code).first():
+            booking_code = generate_booking_code()
+        
+        # Create booking
+        db_booking = Booking(
+            user_id=current_user.id,
+            customer_id=booking.customer_id,
+            sales_person_id=booking.sales_person_id,
+            booking_code=booking_code,
+            check_in=booking.check_in,
+            check_out=booking.check_out,
+            total_pax=booking.total_pax,
+            status=booking.status,
+            notes=booking.notes,
+            total=Decimal('0.00'),
+            tax_total=Decimal('0.00'),
+            amount_paid=Decimal('0.00'),
+            amount_due=Decimal('0.00'),
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        db.add(db_booking)
+        db.flush()  # Get the booking ID
+        
+        # Add booking items
+        items_total = Decimal('0.00')
+        for item_data in booking.items:
+            # Validate package exists
+            package = get_package(db, item_data.package_id)
+            if not package:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Package with ID {item_data.package_id} not found"
+                )
+            
+            # Check package access based on user role
+            if should_apply_user_isolation(current_user) and package.user_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Package with ID {item_data.package_id} not found"
+                )
+            
+            booking_item = BookingItem(
+                booking_id=db_booking.id,
+                package_id=item_data.package_id,
+                unit_price=item_data.unit_price,
+                discount=item_data.discount,
+                pax=item_data.pax,
+                line_total=item_data.line_total,
+                created_at=datetime.utcnow()
+            )
+            
+            db.add(booking_item)
+            items_total += item_data.line_total
+        
+        # Add villas to booking
+        villas_total = Decimal('0.00')
+        for villa_data in booking.villas:
+            villa = get_villa(db, villa_data.villa_id)
+            nights = calculate_nights(booking.check_in, booking.check_out)
+            villa_total = villa.base_price * nights
+            
+            booking_villa = BookingVilla(
+                booking_id=db_booking.id,
+                villa_id=villa_data.villa_id,
+                check_in=booking.check_in,
+                check_out=booking.check_out,
+                nightly_rate=villa.base_price,
+                total_nights=nights,
+                villa_total=villa_total,
+                assigned_at=datetime.utcnow(),
+                assigned_by=current_user.id
+            )
+            
+            db.add(booking_villa)
+            villas_total += villa_total
+            
+            # Update villa availability
+            update_villa_availability(
+                db, villa_data.villa_id, booking.check_in, booking.check_out,
+                booking_code, current_user.id, is_available=False
+            )
+        
+        # Update booking totals
+        db_booking.total = items_total + villas_total
+        db_booking.amount_due = db_booking.total
+        
+        # Create initial history record
+        create_booking_history(
+            db, db_booking.id, current_user.id,
+            field_name='status',
+            old_value=None,
+            new_value=booking.status,
+            change_type='created'
+        )
+        
+        db.commit()
+        db.refresh(db_booking)
+        
+        logger.info(f"Created booking {booking_code} by user {current_user.id}")
+        return db_booking
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating booking: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating booking: {str(e)}"
+        )
 
 
-def update_booking_status(db: Session, booking_id: int, status_update: BookingStatusUpdate) -> Booking:
+# ============================================================================
+# Core UPDATE Operations
+# ============================================================================
+
+def update_booking(
+    db: Session, 
+    booking_id: int, 
+    booking_update: BookingUpdate, 
+    current_user: User
+) -> Booking:
     """
-    Update a booking status
+    Update a booking with business rules
     
     Args:
         db: Database session
         booking_id: Booking ID
-        status_update: Booking status update data
+        booking_update: Booking update data
+        current_user: Current user (for role-based access control)
         
     Returns:
         Booking: Updated booking
         
     Raises:
-        HTTPException: If booking not found or invalid status
+        HTTPException: If booking not found or validation fails
     """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Check if booking can be modified
+        if db_booking.status in ['completed', 'cancelled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot modify booking with status '{db_booking.status}'"
+            )
+        
+        # Update booking fields and track changes
+        update_data = booking_update.dict(exclude_unset=True, exclude={'items'})
+        
+        # Validate customer if being updated
+        if 'customer_id' in update_data:
+            customer = get_customer(db, update_data['customer_id'], current_user)
+            if not customer:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Customer not found"
+                )
+        
+        # Validate sales_person_id if being updated
+        if 'sales_person_id' in update_data and update_data['sales_person_id'] is not None:
+            sales_person = db.query(User).filter(User.id == update_data['sales_person_id']).first()
+            if not sales_person:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sales person not found"
+                )
+        
+        # Check if dates are being updated
+        if "check_in" in update_data or "check_out" in update_data:
+            check_in = update_data.get("check_in", db_booking.check_in)
+            check_out = update_data.get("check_out", db_booking.check_out)
+            
+            # Check availability for all villas
+            for booking_villa in db_booking.villas:
+                is_available, _ = check_villa_availability(
+                    db, booking_villa.villa_id, check_in, check_out,
+                    exclude_booking_id=booking_id
+                )
+                
+                if not is_available:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Villa with ID {booking_villa.villa_id} is not available for the updated dates"
+                    )
+        
+        # Track field changes for history
+        for key, value in update_data.items():
+            old_value = getattr(db_booking, key)
+            if old_value != value:
+                create_booking_history(
+                    db, booking_id, current_user.id,
+                    field_name=key,
+                    old_value=str(old_value) if old_value is not None else None,
+                    new_value=str(value) if value is not None else None,
+                    change_type='field_update'
+                )
+            setattr(db_booking, key, value)
+        
+        # Update items if provided
+        if booking_update.items is not None:
+            # Delete existing items
+            db.query(BookingItem).filter(BookingItem.booking_id == booking_id).delete()
+            
+            # Add new items
+            items_total = Decimal('0.00')
+            for item_data in booking_update.items:
+                # Validate package
+                package = get_package(db, item_data.package_id)
+                if not package:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Package with ID {item_data.package_id} not found"
+                    )
+                
+                if should_apply_user_isolation(current_user) and package.user_id != current_user.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Package with ID {item_data.package_id} not found"
+                    )
+                
+                booking_item = BookingItem(
+                    booking_id=db_booking.id,
+                    package_id=item_data.package_id,
+                    unit_price=item_data.unit_price,
+                    discount=item_data.discount,
+                    pax=item_data.pax,
+                    line_total=item_data.line_total,
+                    created_at=datetime.utcnow()
+                )
+                
+                db.add(booking_item)
+                items_total += item_data.line_total
+            
+            # Recalculate totals
+            recalculate_booking_totals(db, booking_id, current_user)
+        
+        db_booking.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(db_booking)
+        
+        logger.info(f"Updated booking {booking_id} by user {current_user.id}")
+        return db_booking
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating booking {booking_id}: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating booking: {str(e)}"
         )
-    
-    # Validate status
-    valid_statuses = ["pending", "confirmed", "ongoing", "completed", "cancelled"]
-    if status_update.status not in valid_statuses:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
-        )
-    
-    db_booking.status = status_update.status
-    db_booking.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(db_booking)
-    
-    return db_booking
 
 
-def delete_booking(db: Session, booking_id: int) -> bool:
+def update_booking_status(
+    db: Session, 
+    booking_id: int, 
+    status_update: BookingStatusUpdate, 
+    current_user: User
+) -> Booking:
+    """
+    Update booking status with workflow validation
+    
+    Args:
+        db: Database session
+        booking_id: Booking ID
+        status_update: Status update data
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        Booking: Updated booking
+        
+    Raises:
+        HTTPException: If booking not found or invalid status transition
+    """
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Validate status transitions
+        valid_transitions = {
+            'pending': ['confirmed', 'cancelled'],
+            'confirmed': ['checked_in', 'cancelled'],
+            'checked_in': ['checked_out', 'cancelled'],
+            'checked_out': ['completed'],
+            'completed': [],  # Terminal state
+            'cancelled': []  # Terminal state
+        }
+        
+        if status_update.status not in valid_transitions.get(db_booking.status, []):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot change status from '{db_booking.status}' to '{status_update.status}'"
+            )
+        
+        # Create history record
+        create_booking_history(
+            db, booking_id, current_user.id,
+            field_name='status',
+            old_value=db_booking.status,
+            new_value=status_update.status,
+            change_type='status_change'
+        )
+        
+        db_booking.status = status_update.status
+        db_booking.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(db_booking)
+        
+        logger.info(f"Updated booking {booking_id} status to {status_update.status} by user {current_user.id}")
+        return db_booking
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating booking status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating booking status: {str(e)}"
+        )
+
+
+# ============================================================================
+# Core DELETE Operations
+# ============================================================================
+
+def delete_booking(db: Session, booking_id: int, current_user: User) -> bool:
     """
     Delete a booking
     
     Args:
         db: Database session
         booking_id: Booking ID
+        current_user: Current user (for role-based access control)
         
     Returns:
         bool: True if booking was deleted
         
     Raises:
-        HTTPException: If booking not found
+        HTTPException: If booking not found or cannot be deleted
     """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Only allow deletion of pending or cancelled bookings
+        if db_booking.status not in ['pending', 'cancelled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only pending or cancelled bookings can be deleted"
+            )
+        
+        # Free up villa availability
+        for booking_villa in db_booking.villas:
+            update_villa_availability(
+                db, booking_villa.villa_id, 
+                db_booking.check_in, db_booking.check_out,
+                db_booking.booking_code, current_user.id, 
+                is_available=True
+            )
+        
+        db.delete(db_booking)
+        db.commit()
+        
+        logger.info(f"Deleted booking {booking_id} by user {current_user.id}")
+        return True
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting booking {booking_id}: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting booking: {str(e)}"
         )
-    
-    # Free up villa availability
-    for booking_villa in db_booking.villas:
-        current_date = db_booking.check_in
-        while current_date < db_booking.check_out:
-            # Find availability record
-            availability = db.query(VillaAvailability).filter(
-                VillaAvailability.villa_id == booking_villa.villa_id,
-                VillaAvailability.date == current_date
-            ).first()
-            
-            if availability:
-                # If the reason is for this booking, make it available again
-                if availability.blocked_reason and f"Booking Code: {db_booking.booking_code}" in availability.blocked_reason:
-                    availability.is_available = True
-                    availability.blocked_reason = None
-                    availability.updated_at = datetime.utcnow()
-            
-            current_date += timedelta(days=1)
-    
-    db.delete(db_booking)
-    db.commit()
-    
-    return True
 
 
-def add_booking_villa(db: Session, booking_id: int, villa_data: BookingVillaCreate) -> BookingVilla:
+# ============================================================================
+# Booking ITEM Operations
+# ============================================================================
+
+def add_booking_item(
+    db: Session, 
+    booking_id: int, 
+    item: BookingItemCreate, 
+    current_user: User
+) -> BookingItem:
     """
-    Add a villa to a booking
+    Add item to booking and recalculate totals
     
     Args:
         db: Database session
         booking_id: Booking ID
-        villa_data: Villa data
+        item: Item data
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        BookingItem: Created booking item
+        
+    Raises:
+        HTTPException: If booking or package not found
+    """
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Check if booking can be modified
+        if db_booking.status in ['completed', 'cancelled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot modify booking with status '{db_booking.status}'"
+            )
+        
+        # Validate package
+        package = get_package(db, item.package_id)
+        if not package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Package with ID {item.package_id} not found"
+            )
+        
+        if should_apply_user_isolation(current_user) and package.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Package with ID {item.package_id} not found"
+            )
+        
+        # Create booking item
+        booking_item = BookingItem(
+            booking_id=booking_id,
+            package_id=item.package_id,
+            unit_price=item.unit_price,
+            discount=item.discount,
+            pax=item.pax,
+            line_total=item.line_total,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(booking_item)
+        
+        # Create history record
+        create_booking_history(
+            db, booking_id, current_user.id,
+            field_name='items',
+            old_value=None,
+            new_value=f"Added item: {package.name}",
+            change_type='item_added'
+        )
+        
+        # Recalculate totals
+        recalculate_booking_totals(db, booking_id, current_user)
+        
+        db.commit()
+        db.refresh(booking_item)
+        
+        logger.info(f"Added item to booking {booking_id} by user {current_user.id}")
+        return booking_item
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error adding item to booking {booking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error adding item: {str(e)}"
+        )
+
+
+def update_booking_item(
+    db: Session, 
+    booking_id: int, 
+    item_id: int, 
+    item_update: BookingItemUpdate, 
+    current_user: User
+) -> BookingItem:
+    """
+    Update booking item and recalculate totals
+    
+    Args:
+        db: Database session
+        booking_id: Booking ID
+        item_id: Item ID
+        item_update: Item update data
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        BookingItem: Updated booking item
+        
+    Raises:
+        HTTPException: If booking or item not found
+    """
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Check if booking can be modified
+        if db_booking.status in ['completed', 'cancelled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot modify booking with status '{db_booking.status}'"
+            )
+        
+        booking_item = db.query(BookingItem).filter(
+            BookingItem.booking_id == booking_id,
+            BookingItem.id == item_id
+        ).first()
+        
+        if not booking_item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking item not found"
+            )
+        
+        # Update item fields
+        update_data = item_update.dict(exclude_unset=True)
+        
+        # Validate package if being updated
+        if 'package_id' in update_data:
+            package = get_package(db, update_data['package_id'])
+            if not package:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Package with ID {update_data['package_id']} not found"
+                )
+            
+            if should_apply_user_isolation(current_user) and package.user_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Package with ID {update_data['package_id']} not found"
+                )
+        
+        for key, value in update_data.items():
+            setattr(booking_item, key, value)
+        
+        # Create history record
+        create_booking_history(
+            db, booking_id, current_user.id,
+            field_name='items',
+            old_value=None,
+            new_value=f"Updated item {item_id}",
+            change_type='field_update'
+        )
+        
+        # Recalculate totals
+        recalculate_booking_totals(db, booking_id, current_user)
+        
+        db.commit()
+        db.refresh(booking_item)
+        
+        logger.info(f"Updated item {item_id} in booking {booking_id} by user {current_user.id}")
+        return booking_item
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating item {item_id} in booking {booking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating item: {str(e)}"
+        )
+
+
+def remove_booking_item(
+    db: Session, 
+    booking_id: int, 
+    item_id: int, 
+    current_user: User
+) -> bool:
+    """
+    Remove item from booking and recalculate totals
+    
+    Args:
+        db: Database session
+        booking_id: Booking ID
+        item_id: Item ID
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        bool: True if item was removed
+        
+    Raises:
+        HTTPException: If booking or item not found
+    """
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Check if booking can be modified
+        if db_booking.status in ['completed', 'cancelled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot modify booking with status '{db_booking.status}'"
+            )
+        
+        booking_item = db.query(BookingItem).filter(
+            BookingItem.booking_id == booking_id,
+            BookingItem.id == item_id
+        ).first()
+        
+        if not booking_item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking item not found"
+            )
+        
+        # Create history record
+        create_booking_history(
+            db, booking_id, current_user.id,
+            field_name='items',
+            old_value=f"Item {item_id}",
+            new_value=None,
+            change_type='item_removed'
+        )
+        
+        db.delete(booking_item)
+        
+        # Recalculate totals
+        recalculate_booking_totals(db, booking_id, current_user)
+        
+        db.commit()
+        
+        logger.info(f"Removed item {item_id} from booking {booking_id} by user {current_user.id}")
+        return True
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error removing item {item_id} from booking {booking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error removing item: {str(e)}"
+        )
+
+
+# ============================================================================
+# Booking VILLA Operations
+# ============================================================================
+
+def add_booking_villa(
+    db: Session, 
+    booking_id: int, 
+    villa: BookingVillaCreate, 
+    current_user: User
+) -> BookingVilla:
+    """
+    Add villa to booking
+    
+    Args:
+        db: Database session
+        booking_id: Booking ID
+        villa: Villa data
+        current_user: Current user (for role-based access control)
         
     Returns:
         BookingVilla: Created booking villa
@@ -368,337 +936,614 @@ def add_booking_villa(db: Session, booking_id: int, villa_data: BookingVillaCrea
     Raises:
         HTTPException: If booking or villa not found, or villa not available
     """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
-        )
-    
-    villa = get_villa(db, villa_data.villa_id)
-    if not villa:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Villa with ID {villa_data.villa_id} not found"
-        )
-    
-    # Check availability
-    is_available, _ = check_villa_availability(
-        db, villa_data.villa_id, db_booking.check_in, db_booking.check_out
-    )
-    
-    if not is_available:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Villa with ID {villa_data.villa_id} is not available for the booking dates"
-        )
-    
-    # Add villa to booking
-    db_booking_villa = BookingVilla(
-        booking_id=booking_id,
-        villa_id=villa_data.villa_id,
-        assigned_at=datetime.utcnow()
-    )
-    
-    db.add(db_booking_villa)
-    db.commit()
-    db.refresh(db_booking_villa)
-    
-    # Update villa availability
-    current_date = db_booking.check_in
-    while current_date < db_booking.check_out:
-        # Check if availability record exists
-        availability = db.query(VillaAvailability).filter(
-            VillaAvailability.villa_id == villa_data.villa_id,
-            VillaAvailability.date == current_date
-        ).first()
-        
-        if availability:
-            # Update existing record
-            availability.is_available = False
-            availability.blocked_reason = f"Booked (Booking Code: {db_booking.booking_code})"
-            availability.updated_at = datetime.utcnow()
-        else:
-            # Create new record
-            db_availability = VillaAvailability(
-                villa_id=villa_data.villa_id,
-                date=current_date,
-                is_available=False,
-                blocked_reason=f"Booked (Booking Code: {db_booking.booking_code})",
-                updated_at=datetime.utcnow()
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
             )
-            db.add(db_availability)
         
-        current_date += timedelta(days=1)
-    
-    db.commit()
-    
-    return db_booking_villa
+        # Check if booking can be modified
+        if db_booking.status in ['completed', 'cancelled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot modify booking with status '{db_booking.status}'"
+            )
+        
+        villa_obj = get_villa(db, villa.villa_id)
+        if not villa_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Villa with ID {villa.villa_id} not found"
+            )
+        
+        # Check availability
+        is_available, _ = check_villa_availability(
+            db, villa.villa_id, db_booking.check_in, db_booking.check_out
+        )
+        
+        if not is_available:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Villa with ID {villa.villa_id} is not available for the booking dates"
+            )
+        
+        # Calculate villa totals
+        nights = calculate_nights(db_booking.check_in, db_booking.check_out)
+        villa_total = villa_obj.base_price * nights
+        
+        # Add villa to booking
+        booking_villa = BookingVilla(
+            booking_id=booking_id,
+            villa_id=villa.villa_id,
+            check_in=db_booking.check_in,
+            check_out=db_booking.check_out,
+            nightly_rate=villa_obj.base_price,
+            total_nights=nights,
+            villa_total=villa_total,
+            assigned_at=datetime.utcnow(),
+            assigned_by=current_user.id
+        )
+        
+        db.add(booking_villa)
+        
+        # Update villa availability
+        update_villa_availability(
+            db, villa.villa_id, db_booking.check_in, db_booking.check_out,
+            db_booking.booking_code, current_user.id, is_available=False
+        )
+        
+        # Create history record
+        create_booking_history(
+            db, booking_id, current_user.id,
+            field_name='villas',
+            old_value=None,
+            new_value=f"Added villa: {villa_obj.name}",
+            change_type='villa_added'
+        )
+        
+        # Recalculate totals
+        recalculate_booking_totals(db, booking_id, current_user)
+        
+        db.commit()
+        db.refresh(booking_villa)
+        
+        logger.info(f"Added villa {villa.villa_id} to booking {booking_id} by user {current_user.id}")
+        return booking_villa
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error adding villa to booking {booking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error adding villa: {str(e)}"
+        )
 
 
-def remove_booking_villa(db: Session, booking_id: int, villa_id: int) -> bool:
+def update_booking_villa(
+    db: Session,
+    booking_id: int,
+    villa_id: int,
+    villa_update: Dict[str, Any],
+    current_user: User
+) -> BookingVilla:
     """
-    Remove a villa from a booking
+    Update booking villa
     
     Args:
         db: Database session
         booking_id: Booking ID
         villa_id: Villa ID
+        villa_update: Villa update data
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        BookingVilla: Updated booking villa
+        
+    Raises:
+        HTTPException: If booking or villa not found
+    """
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Check if booking can be modified
+        if db_booking.status in ['completed', 'cancelled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot modify booking with status '{db_booking.status}'"
+            )
+        
+        booking_villa = db.query(BookingVilla).filter(
+            BookingVilla.booking_id == booking_id,
+            BookingVilla.villa_id == villa_id
+        ).first()
+        
+        if not booking_villa:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Villa not found in booking"
+            )
+        
+        # Update villa fields
+        for key, value in villa_update.items():
+            if hasattr(booking_villa, key):
+                setattr(booking_villa, key, value)
+        
+        # Recalculate totals
+        recalculate_booking_totals(db, booking_id, current_user)
+        
+        db.commit()
+        db.refresh(booking_villa)
+        
+        logger.info(f"Updated villa {villa_id} in booking {booking_id} by user {current_user.id}")
+        return booking_villa
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating villa {villa_id} in booking {booking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating villa: {str(e)}"
+        )
+
+
+def remove_booking_villa(
+    db: Session, 
+    booking_id: int, 
+    villa_id: int, 
+    current_user: User
+) -> bool:
+    """
+    Remove villa from booking
+    
+    Args:
+        db: Database session
+        booking_id: Booking ID
+        villa_id: Villa ID
+        current_user: Current user (for role-based access control)
         
     Returns:
         bool: True if villa was removed
         
     Raises:
-        HTTPException: If booking or booking villa not found
+        HTTPException: If booking or villa not found
     """
-    db_booking = get_booking(db, booking_id)
+    try:
+        db_booking = get_booking(db, booking_id, current_user)
+        if not db_booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Check if booking can be modified
+        if db_booking.status in ['completed', 'cancelled']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot modify booking with status '{db_booking.status}'"
+            )
+        
+        booking_villa = db.query(BookingVilla).filter(
+            BookingVilla.booking_id == booking_id,
+            BookingVilla.villa_id == villa_id
+        ).first()
+        
+        if not booking_villa:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Villa not found in booking"
+            )
+        
+        # Free up villa availability
+        update_villa_availability(
+            db, villa_id, db_booking.check_in, db_booking.check_out,
+            db_booking.booking_code, current_user.id, is_available=True
+        )
+        
+        # Create history record
+        villa_obj = get_villa(db, villa_id)
+        create_booking_history(
+            db, booking_id, current_user.id,
+            field_name='villas',
+            old_value=f"Villa: {villa_obj.name if villa_obj else villa_id}",
+            new_value=None,
+            change_type='villa_removed'
+        )
+        
+        db.delete(booking_villa)
+        
+        # Recalculate totals
+        recalculate_booking_totals(db, booking_id, current_user)
+        
+        db.commit()
+        
+        logger.info(f"Removed villa {villa_id} from booking {booking_id} by user {current_user.id}")
+        return True
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error removing villa {villa_id} from booking {booking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error removing villa: {str(e)}"
+        )
+
+
+# ============================================================================
+# Calculation Operations
+# ============================================================================
+
+def calculate_booking_totals(
+    items: List[BookingItem],
+    villas: List[BookingVilla]
+) -> Dict[str, Decimal]:
+    """
+    Calculate booking totals
+    
+    Args:
+        items: List of booking items
+        villas: List of booking villas
+        
+    Returns:
+        Dict: Dictionary with subtotal, tax_total, and total
+    """
+    items_subtotal = sum(item.line_total for item in items)
+    villas_subtotal = sum(villa.villa_total for villa in villas)
+    subtotal = items_subtotal + villas_subtotal
+    
+    return {
+        'subtotal': subtotal,
+        'items_subtotal': items_subtotal,
+        'villas_subtotal': villas_subtotal,
+        'tax_total': Decimal('0.00'),
+        'total': subtotal
+    }
+
+
+def recalculate_booking_totals(
+    db: Session, 
+    booking_id: int, 
+    current_user: User
+) -> Booking:
+    """
+    Recalculate and update booking totals
+    
+    Args:
+        db: Database session
+        booking_id: Booking ID
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        Booking: Updated booking
+    """
+    db_booking = get_booking(db, booking_id, current_user)
     if not db_booking:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Booking not found"
         )
     
-    db_booking_villa = db.query(BookingVilla).filter(
-        BookingVilla.booking_id == booking_id,
-        BookingVilla.villa_id == villa_id
-    ).first()
+    # Calculate totals
+    totals = calculate_booking_totals(db_booking.items, db_booking.villas)
     
-    if not db_booking_villa:
+    # Update booking
+    db_booking.total = totals['total']
+    db_booking.tax_total = totals['tax_total']
+    db_booking.amount_due = totals['total'] - db_booking.amount_paid
+    db_booking.updated_at = datetime.utcnow()
+    
+    return db_booking
+
+
+# ============================================================================
+# History Operations
+# ============================================================================
+
+def create_booking_history(
+    db: Session,
+    booking_id: int,
+    user_id: int,
+    field_name: str,
+    old_value: Optional[str],
+    new_value: Optional[str],
+    change_type: str
+) -> BookingHistory:
+    """
+    Create booking history record
+    
+    Args:
+        db: Database session
+        booking_id: Booking ID
+        user_id: User ID who made the change
+        field_name: Name of the field changed
+        old_value: Old value
+        new_value: New value
+        change_type: Type of change
+        
+    Returns:
+        BookingHistory: Created history record
+    """
+    history = BookingHistory(
+        booking_id=booking_id,
+        user_id=user_id,
+        field_name=field_name,
+        old_value=old_value,
+        new_value=new_value,
+        change_type=change_type,
+        created_at=datetime.utcnow()
+    )
+    
+    db.add(history)
+    return history
+
+
+def get_booking_history(
+    db: Session, 
+    booking_id: int, 
+    current_user: User
+) -> List[BookingHistory]:
+    """
+    Get booking history with user details
+    
+    Args:
+        db: Database session
+        booking_id: Booking ID
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        List[BookingHistory]: List of history records
+    """
+    # Check booking access
+    db_booking = get_booking(db, booking_id, current_user)
+    if not db_booking:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Villa not found in booking"
+            detail="Booking not found"
         )
     
-    # Free up villa availability
-    current_date = db_booking.check_in
-    while current_date < db_booking.check_out:
-        # Find availability record
+    return db.query(BookingHistory).filter(
+        BookingHistory.booking_id == booking_id
+    ).order_by(BookingHistory.created_at.desc()).all()
+
+
+# ============================================================================
+# Villa Availability Operations
+# ============================================================================
+
+def check_villa_availability(
+    db: Session,
+    villa_id: int,
+    check_in: date,
+    check_out: date,
+    exclude_booking_id: Optional[int] = None
+) -> Tuple[bool, List[date]]:
+    """
+    Check if a villa is available for the given dates
+    
+    Args:
+        db: Database session
+        villa_id: Villa ID
+        check_in: Check-in date
+        check_out: Check-out date
+        exclude_booking_id: Booking ID to exclude from check
+        
+    Returns:
+        Tuple[bool, List[date]]: (is_available, list of unavailable dates)
+    """
+    unavailable_dates = []
+    current_date = check_in
+    
+    while current_date < check_out:
+        # Check if date is blocked in villa_availability
+        availability = db.query(VillaAvailability).filter(
+            VillaAvailability.villa_id == villa_id,
+            VillaAvailability.date == current_date,
+            VillaAvailability.is_available == False
+        ).first()
+        
+        if availability:
+            # Check if it's blocked by the excluded booking
+            if exclude_booking_id:
+                booking = db.query(Booking).filter(
+                    Booking.id == exclude_booking_id
+                ).first()
+                if booking and f"Booking Code: {booking.booking_code}" in availability.blocked_reason:
+                    # This is the same booking, skip
+                    current_date += timedelta(days=1)
+                    continue
+            
+            unavailable_dates.append(current_date)
+        
+        current_date += timedelta(days=1)
+    
+    is_available = len(unavailable_dates) == 0
+    return is_available, unavailable_dates
+
+
+def update_villa_availability(
+    db: Session,
+    villa_id: int,
+    check_in: date,
+    check_out: date,
+    booking_code: str,
+    user_id: int,
+    is_available: bool = False
+) -> None:
+    """
+    Update villa availability for date range
+    
+    Args:
+        db: Database session
+        villa_id: Villa ID
+        check_in: Check-in date
+        check_out: Check-out date
+        booking_code: Booking code
+        user_id: User ID
+        is_available: Whether to mark as available or unavailable
+    """
+    current_date = check_in
+    
+    while current_date < check_out:
+        # Check if availability record exists
         availability = db.query(VillaAvailability).filter(
             VillaAvailability.villa_id == villa_id,
             VillaAvailability.date == current_date
         ).first()
         
         if availability:
-            # If the reason is for this booking, make it available again
-            if availability.blocked_reason and f"Booking Code: {db_booking.booking_code}" in availability.blocked_reason:
-                availability.is_available = True
+            # Update existing record
+            availability.is_available = is_available
+            if is_available:
                 availability.blocked_reason = None
-                availability.updated_at = datetime.utcnow()
+            else:
+                availability.blocked_reason = f"Booked (Booking Code: {booking_code})"
+            availability.updated_by = user_id
+            availability.updated_at = datetime.utcnow()
+        else:
+            # Create new record
+            db_availability = VillaAvailability(
+                villa_id=villa_id,
+                date=current_date,
+                is_available=is_available,
+                blocked_reason=None if is_available else f"Booked (Booking Code: {booking_code})",
+                updated_by=user_id,
+                updated_at=datetime.utcnow()
+            )
+            db.add(db_availability)
         
         current_date += timedelta(days=1)
-    
-    db.delete(db_booking_villa)
-    db.commit()
-    
-    return True
 
 
-def add_booking_package(db: Session, booking_id: int, package_data: BookingPackageCreate) -> BookingPackage:
+# ============================================================================
+# Statistics Operations
+# ============================================================================
+
+def get_booking_statistics(
+    db: Session,
+    current_user: User,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None
+) -> Dict[str, Any]:
     """
-    Add a package to a booking
+    Get booking statistics for dashboard
     
     Args:
         db: Database session
-        booking_id: Booking ID
-        package_data: Package data
+        current_user: Current user (for role-based access control)
+        from_date: Filter from date
+        to_date: Filter to date
         
     Returns:
-        BookingPackage: Created booking package
-        
-    Raises:
-        HTTPException: If booking not found
+        Dict: Booking statistics
     """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
-        )
+    query = db.query(Booking)
     
-    # Add package to booking
-    db_booking_package = BookingPackage(
-        booking_id=booking_id,
-        package_name=package_data.package_name,
-        package_price=package_data.package_price,
-        notes=package_data.notes
-    )
+    # Apply user isolation
+    user_filter = get_user_filter_condition(current_user, Booking.user_id)
+    if user_filter is not True:
+        query = query.filter(user_filter)
     
-    db.add(db_booking_package)
-    db.commit()
-    db.refresh(db_booking_package)
+    # Apply date filters
+    if from_date:
+        query = query.filter(Booking.check_in >= from_date)
+    if to_date:
+        query = query.filter(Booking.check_in <= to_date)
     
-    return db_booking_package
-
-
-def remove_booking_package(db: Session, booking_id: int, package_id: int) -> bool:
-    """
-    Remove a package from a booking
+    # Count total bookings
+    total_bookings = query.count()
     
-    Args:
-        db: Database session
-        booking_id: Booking ID
-        package_id: Package ID
-        
-    Returns:
-        bool: True if package was removed
-        
-    Raises:
-        HTTPException: If booking or booking package not found
-    """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
-        )
+    # Status breakdown
+    status_counts = db.query(
+        Booking.status,
+        func.count(Booking.id).label('count')
+    ).filter(user_filter if user_filter is not True else True).group_by(Booking.status).all()
     
-    db_booking_package = db.query(BookingPackage).filter(
-        BookingPackage.booking_id == booking_id,
-        BookingPackage.id == package_id
-    ).first()
-    
-    if not db_booking_package:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Package not found in booking"
-        )
-    
-    db.delete(db_booking_package)
-    db.commit()
-    
-    return True
-
-
-def add_booking_addon(db: Session, booking_id: int, addon_data: BookingAddonCreate) -> BookingAddon:
-    """
-    Add an addon to a booking
-    
-    Args:
-        db: Database session
-        booking_id: Booking ID
-        addon_data: Addon data
-        
-    Returns:
-        BookingAddon: Created booking addon
-        
-    Raises:
-        HTTPException: If booking not found
-    """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
-        )
-    
-    # Add addon to booking
-    db_booking_addon = BookingAddon(
-        booking_id=booking_id,
-        service_name=addon_data.service_name,
-        service_price=addon_data.service_price,
-        quantity=addon_data.quantity
-    )
-    
-    db.add(db_booking_addon)
-    db.commit()
-    db.refresh(db_booking_addon)
-    
-    return db_booking_addon
-
-
-def remove_booking_addon(db: Session, booking_id: int, addon_id: int) -> bool:
-    """
-    Remove an addon from a booking
-    
-    Args:
-        db: Database session
-        booking_id: Booking ID
-        addon_id: Addon ID
-        
-    Returns:
-        bool: True if addon was removed
-        
-    Raises:
-        HTTPException: If booking or booking addon not found
-    """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
-        )
-    
-    db_booking_addon = db.query(BookingAddon).filter(
-        BookingAddon.booking_id == booking_id,
-        BookingAddon.id == addon_id
-    ).first()
-    
-    if not db_booking_addon:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Addon not found in booking"
-        )
-    
-    db.delete(db_booking_addon)
-    db.commit()
-    
-    return True
-
-
-def get_booking_details(db: Session, booking_id: int) -> Dict[str, Any]:
-    """
-    Get booking details with financial information
-    
-    Args:
-        db: Database session
-        booking_id: Booking ID
-        
-    Returns:
-        Dict[str, Any]: Booking details
-        
-    Raises:
-        HTTPException: If booking not found
-    """
-    db_booking = get_booking(db, booking_id)
-    if not db_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
-        )
-    
-    # Calculate total price
-    total_price = Decimal('0.00')
-    
-    # Villa prices
-    nights = calculate_nights(db_booking.check_in, db_booking.check_out)
-    for booking_villa in db_booking.villas:
-        villa = db.query(Villa).filter(Villa.id == booking_villa.villa_id).first()
-        if villa:
-            total_price += villa.base_price * nights
-    
-    # Package prices
-    for package in db_booking.packages:
-        total_price += package.package_price
-    
-    # Addon prices
-    for addon in db_booking.addons:
-        total_price += addon.service_price * addon.quantity
-    
-    # Calculate total paid
-    total_paid = db.query(func.sum(Payment.amount)).filter(
-        Payment.booking_id == booking_id,
-        Payment.status == "paid"
+    # Calculate total revenue
+    total_revenue = query.with_entities(
+        func.sum(Booking.total)
     ).scalar() or Decimal('0.00')
     
-    # Calculate balance
-    balance = total_price - total_paid
+    # Calculate total paid
+    total_paid = query.with_entities(
+        func.sum(Booking.amount_paid)
+    ).scalar() or Decimal('0.00')
     
-    # Create result
-    result = {
-        "booking": db_booking,
-        "total_price": total_price,
-        "total_paid": total_paid,
-        "balance": balance
+    # Recent bookings
+    recent_bookings = query.options(
+        joinedload(Booking.customer)
+    ).order_by(Booking.created_at.desc()).limit(5).all()
+    
+    return {
+        'total_bookings': total_bookings,
+        'status_breakdown': {status: count for status, count in status_counts},
+        'total_revenue': total_revenue,
+        'total_paid': total_paid,
+        'outstanding': total_revenue - total_paid,
+        'recent_bookings': recent_bookings
     }
+
+
+# ============================================================================
+# Validation Operations
+# ============================================================================
+
+def validate_booking_dates(
+    db: Session,
+    check_in: date,
+    check_out: date,
+    villa_ids: List[int],
+    exclude_booking_id: Optional[int] = None
+) -> Tuple[bool, List[str]]:
+    """
+    Validate booking dates and villa availability
     
-    return result
+    Args:
+        db: Database session
+        check_in: Check-in date
+        check_out: Check-out date
+        villa_ids: List of villa IDs
+        exclude_booking_id: Booking ID to exclude from check
+        
+    Returns:
+        Tuple[bool, List[str]]: (is_valid, error_messages)
+    """
+    error_messages = []
+    
+    # Check if dates are valid
+    if check_out <= check_in:
+        error_messages.append("Check-out date must be after check-in date")
+    
+    # Check if check-in is in the past
+    if check_in < date.today():
+        error_messages.append("Check-in date cannot be in the past")
+    
+    # Check villa availability
+    for villa_id in villa_ids:
+        is_available, unavailable_dates = check_villa_availability(
+            db, villa_id, check_in, check_out, exclude_booking_id
+        )
+        
+        if not is_available:
+            villa = get_villa(db, villa_id)
+            villa_name = villa.name if villa else f"Villa {villa_id}"
+            error_messages.append(
+                f"{villa_name} is not available for dates: {', '.join(str(d) for d in unavailable_dates)}"
+            )
+    
+    is_valid = len(error_messages) == 0
+    return is_valid, error_messages

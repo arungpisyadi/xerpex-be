@@ -8,214 +8,513 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.booking import Booking
+from app.models.user import User
 from app.schemas.booking import (
-    BookingCreate, BookingUpdate, BookingResponse, BookingDetailResponse,
-    BookingStatusUpdate, BookingVillaCreate, BookingVillaResponse,
-    BookingPackageCreate, BookingPackageResponse,
-    BookingAddonCreate, BookingAddonResponse
+    BookingCreate, BookingUpdate, BookingStatusUpdate,
+    Booking, BookingDetail, BookingListResponse,
+    BookingItemCreate, BookingItemUpdate, BookingItem,
+    BookingVillaCreate, BookingVillaUpdate, BookingVilla,
+    BookingHistory, BookingStatus
 )
 from app.services.booking import (
     get_booking, get_bookings, create_booking, update_booking,
-    update_booking_status, delete_booking, get_booking_details,
-    add_booking_villa, remove_booking_villa,
-    add_booking_package, remove_booking_package,
-    add_booking_addon, remove_booking_addon
+    update_booking_status, delete_booking,
+    add_booking_item, update_booking_item, remove_booking_item,
+    add_booking_villa, update_booking_villa, remove_booking_villa,
+    get_booking_history, get_booking_statistics
 )
-from app.utils.security import get_current_active_user, get_current_admin_user
+from app.utils.security import get_current_user
+
+router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
-router = APIRouter(
-    prefix="/bookings",
-    tags=["bookings"],
-    dependencies=[Depends(get_current_active_user)]
-)
-
-
-@router.post("", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
-def create_booking_endpoint(
-    booking: BookingCreate,
+@router.get("", response_model=BookingListResponse)
+async def list_bookings(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    status: Optional[BookingStatus] = Query(None, description="Filter by booking status"),
+    customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
+    search: Optional[str] = Query(None, description="Search by booking code or customer name"),
+    check_in_from: Optional[date] = Query(None, description="Filter by check-in date from"),
+    check_in_to: Optional[date] = Query(None, description="Filter by check-in date to"),
+    villa_id: Optional[int] = Query(None, description="Filter by villa ID"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Create a new booking
+    Get list of bookings with optional filtering and search
     """
-    return create_booking(db, booking, current_user.id)
-
-
-@router.get("", response_model=List[BookingResponse])
-def read_bookings(
-    skip: int = 0,
-    limit: int = 100,
-    status: Optional[str] = None,
-    guest_name: Optional[str] = None,
-    check_in_from: Optional[date] = None,
-    check_in_to: Optional[date] = None,
-    villa_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
-):
-    """
-    Get all bookings with optional filtering
-    """
-    return get_bookings(
-        db, 
-        skip=skip, 
+    bookings = get_bookings(
+        db=db,
+        current_user=current_user,
+        skip=skip,
         limit=limit,
         status=status,
-        guest_name=guest_name,
+        customer_id=customer_id,
+        search=search,
         check_in_from=check_in_from,
         check_in_to=check_in_to,
         villa_id=villa_id
     )
+    
+    # Get total count for pagination
+    total_bookings = len(get_bookings(
+        db=db,
+        current_user=current_user,
+        skip=0,
+        limit=10000,
+        status=status,
+        customer_id=customer_id,
+        search=search,
+        check_in_from=check_in_from,
+        check_in_to=check_in_to,
+        villa_id=villa_id
+    ))
+    
+    return {
+        "bookings": bookings,
+        "total": total_bookings,
+        "skip": skip,
+        "limit": limit
+    }
 
 
-@router.get("/{booking_id}", response_model=BookingResponse)
-def read_booking(
-    booking_id: int,
+@router.get("/statistics", response_model=dict)
+async def get_booking_statistics_endpoint(
+    from_date: Optional[date] = Query(None, description="Statistics from date"),
+    to_date: Optional[date] = Query(None, description="Statistics to date"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Get a booking by ID
+    Get booking statistics for dashboard
     """
-    db_booking = get_booking(db, booking_id)
-    if db_booking is None:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    return db_booking
+    stats = get_booking_statistics(
+        db=db,
+        current_user=current_user,
+        from_date=from_date,
+        to_date=to_date
+    )
+    return stats
 
 
-@router.get("/{booking_id}/details", response_model=BookingDetailResponse)
-def read_booking_details(
-    booking_id: int,
+@router.post("", response_model=Booking, status_code=status.HTTP_201_CREATED)
+async def create_booking_endpoint(
+    booking: BookingCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Get detailed booking information including financial details
+    Create a new booking with items and villas
     """
-    return get_booking_details(db, booking_id)
+    try:
+        db_booking = create_booking(
+            db=db,
+            booking=booking,
+            current_user=current_user
+        )
+        return db_booking
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
-@router.put("/{booking_id}", response_model=BookingResponse)
-def update_booking_endpoint(
+@router.get("/{booking_id}", response_model=Booking)
+async def get_booking_endpoint(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get a specific booking by ID
+    """
+    booking = get_booking(db=db, booking_id=booking_id, current_user=current_user)
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found"
+        )
+    return booking
+
+
+@router.put("/{booking_id}", response_model=Booking)
+async def update_booking_endpoint(
     booking_id: int,
     booking_update: BookingUpdate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update a booking
     """
-    return update_booking(db, booking_id, booking_update)
+    try:
+        updated_booking = update_booking(
+            db=db,
+            booking_id=booking_id,
+            booking_update=booking_update,
+            current_user=current_user
+        )
+        return updated_booking
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
-@router.patch("/{booking_id}/status", response_model=BookingResponse)
-def update_booking_status_endpoint(
+@router.patch("/{booking_id}/status", response_model=Booking)
+async def update_booking_status_endpoint(
     booking_id: int,
     status_update: BookingStatusUpdate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Update a booking status
+    Update booking status with workflow validation
     """
-    return update_booking_status(db, booking_id, status_update)
+    try:
+        updated_booking = update_booking_status(
+            db=db,
+            booking_id=booking_id,
+            status_update=status_update,
+            current_user=current_user
+        )
+        return updated_booking
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_booking_endpoint(
+async def delete_booking_endpoint(
     booking_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Delete a booking (admin only)
+    Delete a booking (only pending or cancelled bookings)
     """
-    delete_booking(db, booking_id)
-    return {"detail": "Booking deleted successfully"}
+    success = delete_booking(
+        db=db,
+        booking_id=booking_id,
+        current_user=current_user
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found"
+        )
 
 
-# Villa management within bookings
-@router.post("/{booking_id}/villas", response_model=BookingVillaResponse)
-def add_villa_to_booking(
+# ============================================================================
+# Booking Items Management
+# ============================================================================
+
+@router.post("/{booking_id}/items", response_model=BookingItem, status_code=status.HTTP_201_CREATED)
+async def add_booking_item_endpoint(
+    booking_id: int,
+    item: BookingItemCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Add an item to a booking
+    """
+    try:
+        booking_item = add_booking_item(
+            db=db,
+            booking_id=booking_id,
+            item=item,
+            current_user=current_user
+        )
+        return booking_item
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.put("/{booking_id}/items/{item_id}", response_model=BookingItem)
+async def update_booking_item_endpoint(
+    booking_id: int,
+    item_id: int,
+    item_update: BookingItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update a booking item
+    """
+    try:
+        updated_item = update_booking_item(
+            db=db,
+            booking_id=booking_id,
+            item_id=item_id,
+            item_update=item_update,
+            current_user=current_user
+        )
+        return updated_item
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.delete("/{booking_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_booking_item_endpoint(
+    booking_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Remove an item from a booking
+    """
+    success = remove_booking_item(
+        db=db,
+        booking_id=booking_id,
+        item_id=item_id,
+        current_user=current_user
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking item not found"
+        )
+
+
+# ============================================================================
+# Villa Management
+# ============================================================================
+
+@router.post("/{booking_id}/villas", response_model=BookingVilla, status_code=status.HTTP_201_CREATED)
+async def add_villa_to_booking(
     booking_id: int,
     villa_data: BookingVillaCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Add a villa to a booking
     """
-    return add_booking_villa(db, booking_id, villa_data)
+    try:
+        booking_villa = add_booking_villa(
+            db=db,
+            booking_id=booking_id,
+            villa=villa_data,
+            current_user=current_user
+        )
+        return booking_villa
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.put("/{booking_id}/villas/{villa_id}", response_model=BookingVilla)
+async def update_villa_in_booking(
+    booking_id: int,
+    villa_id: int,
+    villa_update: BookingVillaUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update villa assignment in a booking
+    """
+    try:
+        # Convert Pydantic model to dict for update
+        update_data = villa_update.dict(exclude_unset=True)
+        updated_villa = update_booking_villa(
+            db=db,
+            booking_id=booking_id,
+            villa_id=villa_id,
+            villa_update=update_data,
+            current_user=current_user
+        )
+        return updated_villa
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.delete("/{booking_id}/villas/{villa_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_villa_from_booking(
+async def remove_villa_from_booking(
     booking_id: int,
     villa_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Remove a villa from a booking
     """
-    remove_booking_villa(db, booking_id, villa_id)
-    return {"detail": "Villa removed from booking successfully"}
+    success = remove_booking_villa(
+        db=db,
+        booking_id=booking_id,
+        villa_id=villa_id,
+        current_user=current_user
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Villa not found in booking"
+        )
 
 
-# Package management within bookings
-@router.post("/{booking_id}/packages", response_model=BookingPackageResponse)
-def add_package_to_booking(
+# ============================================================================
+# Booking History
+# ============================================================================
+
+@router.get("/{booking_id}/history", response_model=List[BookingHistory])
+async def get_booking_history_endpoint(
     booking_id: int,
-    package_data: BookingPackageCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Add a package to a booking
+    Get booking change history
     """
-    return add_booking_package(db, booking_id, package_data)
+    history = get_booking_history(
+        db=db,
+        booking_id=booking_id,
+        current_user=current_user
+    )
+    return history
 
 
-@router.delete("/{booking_id}/packages/{package_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_package_from_booking(
+# ============================================================================
+# Booking Workflow Actions
+# ============================================================================
+
+@router.post("/{booking_id}/confirm", response_model=Booking)
+async def confirm_booking(
     booking_id: int,
-    package_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Remove a package from a booking
+    Confirm a booking (change status from pending to confirmed)
     """
-    remove_booking_package(db, booking_id, package_id)
-    return {"detail": "Package removed from booking successfully"}
+    status_update = BookingStatusUpdate(status=BookingStatus.confirmed)
+    try:
+        updated_booking = update_booking_status(
+            db=db,
+            booking_id=booking_id,
+            status_update=status_update,
+            current_user=current_user
+        )
+        return updated_booking
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
-# Addon management within bookings
-@router.post("/{booking_id}/addons", response_model=BookingAddonResponse)
-def add_addon_to_booking(
+@router.post("/{booking_id}/check-in", response_model=Booking)
+async def check_in_booking(
     booking_id: int,
-    addon_data: BookingAddonCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Add an addon to a booking
+    Check in a booking (change status to checked_in)
     """
-    return add_booking_addon(db, booking_id, addon_data)
+    status_update = BookingStatusUpdate(status=BookingStatus.checked_in)
+    try:
+        updated_booking = update_booking_status(
+            db=db,
+            booking_id=booking_id,
+            status_update=status_update,
+            current_user=current_user
+        )
+        return updated_booking
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
-@router.delete("/{booking_id}/addons/{addon_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_addon_from_booking(
+@router.post("/{booking_id}/check-out", response_model=Booking)
+async def check_out_booking(
     booking_id: int,
-    addon_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Remove an addon from a booking
+    Check out a booking (change status to checked_out)
     """
-    remove_booking_addon(db, booking_id, addon_id)
-    return {"detail": "Addon removed from booking successfully"}
+    status_update = BookingStatusUpdate(status=BookingStatus.checked_out)
+    try:
+        updated_booking = update_booking_status(
+            db=db,
+            booking_id=booking_id,
+            status_update=status_update,
+            current_user=current_user
+        )
+        return updated_booking
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/{booking_id}/complete", response_model=Booking)
+async def complete_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Complete a booking (change status to completed)
+    """
+    status_update = BookingStatusUpdate(status=BookingStatus.completed)
+    try:
+        updated_booking = update_booking_status(
+            db=db,
+            booking_id=booking_id,
+            status_update=status_update,
+            current_user=current_user
+        )
+        return updated_booking
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/{booking_id}/cancel", response_model=Booking)
+async def cancel_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Cancel a booking (change status to cancelled)
+    """
+    status_update = BookingStatusUpdate(status=BookingStatus.cancelled)
+    try:
+        updated_booking = update_booking_status(
+            db=db,
+            booking_id=booking_id,
+            status_update=status_update,
+            current_user=current_user
+        )
+        return updated_booking
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )

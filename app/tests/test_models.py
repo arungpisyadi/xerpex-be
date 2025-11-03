@@ -9,12 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.villa import Villa, VillaAvailability
-from app.models.booking import Booking, BookingVilla, BookingPackage, BookingAddon
-from app.models.payment import Payment, PaymentInvoice, PaymentInvoiceItem
+from app.models.booking import Booking, BookingVilla
+from app.models.payment import Payment, Invoice, InvoiceItem
 from app.tests.utils import (
     create_test_villa, create_test_villa_availability,
     create_test_booking, create_test_booking_villa,
-    create_test_booking_package, create_test_booking_addon,
     create_test_payment, create_test_invoice,
     create_test_invoice_item, create_complete_test_booking
 )
@@ -121,61 +120,30 @@ def test_booking_villa_model(db: Session):
     assert booking_villa.assigned_at is not None
 
 
-def test_booking_package_model(db: Session):
-    """Test BookingPackage model"""
-    # Create booking
-    booking = create_test_booking(db)
-    
-    # Create booking package
-    booking_package = create_test_booking_package(db, booking.id)
-    
-    # Check booking package attributes
-    assert booking_package.id is not None
-    assert booking_package.booking_id == booking.id
-    assert booking_package.package_name == "Test Package"
-    assert booking_package.package_price == Decimal("500000.00")
-    assert booking_package.notes is None
-
-
-def test_booking_addon_model(db: Session):
-    """Test BookingAddon model"""
-    # Create booking
-    booking = create_test_booking(db)
-    
-    # Create booking addon
-    booking_addon = create_test_booking_addon(db, booking.id)
-    
-    # Check booking addon attributes
-    assert booking_addon.id is not None
-    assert booking_addon.booking_id == booking.id
-    assert booking_addon.service_name == "Test Addon"
-    assert booking_addon.service_price == Decimal("200000.00")
-    assert booking_addon.quantity == 1
-
-
 def test_payment_model(db: Session):
     """Test Payment model"""
-    # Create booking
+    # Create booking and invoice
     booking = create_test_booking(db)
+    invoice = create_test_invoice(db, booking.id)
     
     # Create payment
-    payment = create_test_payment(db, booking.id)
+    payment = create_test_payment(db, invoice_id=invoice.id)
     
     # Check payment attributes
     assert payment.id is not None
-    assert payment.booking_id == booking.id
+    assert payment.invoice_id == invoice.id
     assert payment.amount == Decimal("1000000.00")
     assert payment.payment_method == "bank_transfer"
     assert payment.payment_date is not None
     assert payment.status == "pending"
     assert payment.notes is None
-    assert payment.created_by == 1
+    assert payment.user_id == 1
     assert payment.created_at is not None
     assert payment.updated_at is not None
 
 
-def test_payment_invoice_model(db: Session):
-    """Test PaymentInvoice model"""
+def test_invoice_model(db: Session):
+    """Test Invoice model"""
     # Create booking
     booking = create_test_booking(db)
     
@@ -185,21 +153,18 @@ def test_payment_invoice_model(db: Session):
     # Check invoice attributes
     assert invoice.id is not None
     assert invoice.invoice_number is not None
-    assert invoice.booking_id == booking.id
-    assert invoice.guest_name == "Test Guest"
-    assert invoice.guest_email == "guest@example.com"
-    assert invoice.guest_phone == "+1234567890"
+    assert invoice.customer_id == 1
     assert invoice.due_date is not None
-    assert invoice.total_amount == Decimal("1000000.00")
+    assert invoice.total == Decimal("1000000.00")
     assert invoice.status == "pending"
     assert invoice.notes is None
-    assert invoice.created_by == 1
+    assert invoice.user_id == 1
     assert invoice.created_at is not None
     assert invoice.updated_at is not None
 
 
-def test_payment_invoice_item_model(db: Session):
-    """Test PaymentInvoiceItem model"""
+def test_invoice_item_model(db: Session):
+    """Test InvoiceItem model"""
     # Create booking and invoice
     booking = create_test_booking(db)
     invoice = create_test_invoice(db, booking.id)
@@ -210,10 +175,8 @@ def test_payment_invoice_item_model(db: Session):
     # Check invoice item attributes
     assert item.id is not None
     assert item.invoice_id == invoice.id
-    assert item.description == "Test Item"
-    assert item.price == Decimal("1000000.00")
-    assert item.quantity == 1
-    assert item.subtotal == Decimal("1000000.00")
+    assert item.unit_price == Decimal("1000000.00")
+    assert item.line_total == Decimal("1000000.00")
 
 
 def test_model_relationships(db: Session):
@@ -242,31 +205,15 @@ def test_model_relationships(db: Session):
     assert booking.villas[0].id == booking_villa.id
     assert booking.villas[0].villa_id == test_data["villa"]
     
-    # Test booking to package relationship
-    assert len(booking.packages) == 1
-    assert booking.packages[0].id == test_data["booking_package"].id
-    assert booking.packages[0].package_name == "Test Package"
-    
-    # Test booking to addon relationship
-    assert len(booking.addons) == 1
-    assert booking.addons[0].id == test_data["booking_addon"].id
-    assert booking.addons[0].service_name == "Test Addon"
-    
-    # Test booking to payment relationship
-    assert len(booking.payments) == 1
-    assert booking.payments[0].id == test_data["payment"].id
-    assert booking.payments[0].amount == Decimal("1000000.00")
-    
-    # Test booking to invoice relationship
-    assert len(booking.invoices) == 1
-    assert booking.invoices[0].id == test_data["invoice"].id
-    assert booking.invoices[0].total_amount == Decimal("1000000.00")
-    
     # Test invoice to items relationship
     invoice = test_data["invoice"]
     assert len(invoice.items) == 1
     assert invoice.items[0].id == test_data["invoice_item"].id
-    assert invoice.items[0].description == "Test Item"
+    
+    # Test invoice to payments relationship
+    assert len(invoice.payments) == 1
+    assert invoice.payments[0].id == test_data["payment"].id
+    assert invoice.payments[0].amount == Decimal("1000000.00")
     
     # Test payment to invoice relationship
     payment = test_data["payment"]

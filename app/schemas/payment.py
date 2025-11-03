@@ -82,15 +82,13 @@ class InvoiceItemBase(BaseModel):
     package_id: int
     unit_price: Decimal = Field(..., gt=0, description="Unit price of the item")
     discount: Decimal = Field(default=Decimal('0.00'), ge=0, description="Discount amount")
+    pax: int = 1
     line_total: Decimal = Field(..., gt=0, description="Total for this line item")
 
-    @validator('line_total')
-    def validate_line_total(cls, v, values):
-        """Validate that line_total matches calculation"""
-        if 'unit_price' in values and 'discount' in values:
-            expected_total = values['unit_price'] - values['discount']
-            if abs(v - expected_total) > Decimal('0.01'):
-                raise ValueError('line_total must equal unit_price - discount')
+    @validator('pax')
+    def validate_pax(cls, v):
+        if v < 1:
+            raise ValueError('pax must be at least 1')
         return v
 
 
@@ -104,6 +102,7 @@ class InvoiceItemUpdate(BaseModel):
     package_id: Optional[int] = None
     unit_price: Optional[Decimal] = Field(None, gt=0)
     discount: Optional[Decimal] = Field(None, ge=0)
+    pax: Optional[int] = None
     line_total: Optional[Decimal] = Field(None, gt=0)
 
 

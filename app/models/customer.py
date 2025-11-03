@@ -27,6 +27,7 @@ class Customer(Base):
     user = relationship("User", back_populates="customers")
     quotes = relationship("Quote", back_populates="customer", cascade="all, delete-orphan")
     invoices = relationship("Invoice", back_populates="customer", cascade="all, delete-orphan")
+    bookings = relationship("Booking", back_populates="customer", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (

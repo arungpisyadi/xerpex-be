@@ -4,7 +4,7 @@ Database models for the XerpeX ERP System
 from app.database import Base
 from app.models.user import User, UserActivity
 from app.models.villa import Villa, VillaAvailability
-from app.models.booking import Booking, BookingVilla, BookingPackage, BookingAddon
+from app.models.booking import Booking, BookingVilla, BookingItem, BookingHistory
 from app.models.payment import Payment, Invoice, InvoiceItem
 from app.models.salesmen import Salesmen
 from app.models.survey import Survey
@@ -25,8 +25,8 @@ __all__ = [
     "VillaAvailability",
     "Booking",
     "BookingVilla",
-    "BookingPackage",
-    "BookingAddon",
+    "BookingItem",
+    "BookingHistory",
     "Payment",
     "Invoice",
     "InvoiceItem",

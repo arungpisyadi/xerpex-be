@@ -2,133 +2,318 @@
 Booking schemas for the XerpeX ERP System
 """
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Optional, List, Literal
+from decimal import Decimal
+from enum import Enum
 from pydantic import BaseModel, EmailStr, condecimal, Field, field_validator
 
 from app.utils.helpers import sanitize_phone_number
 
 
+# Booking status enum
+class BookingStatus(str, Enum):
+    """Booking status enumeration"""
+    pending = "pending"
+    confirmed = "confirmed"
+    checked_in = "checked_in"
+    checked_out = "checked_out"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+# Booking change types for history
+BookingChangeType = Literal[
+    'created', 'status_change', 'field_update', 'item_added',
+    'item_removed', 'villa_added', 'villa_removed', 'payment_received'
+]
+
+
+# ============================================================================
+# Booking Item Schemas
+# ============================================================================
+
+class BookingItemBase(BaseModel):
+    """Base booking item schema"""
+    package_id: int
+    unit_price: condecimal(max_digits=15, decimal_places=2)
+    discount: condecimal(max_digits=15, decimal_places=2) = Decimal('0.00')
+    pax: int = 1
+    line_total: condecimal(max_digits=15, decimal_places=2)
+
+    @field_validator('pax')
+    @classmethod
+    def validate_pax(cls, v):
+        if v < 1:
+            raise ValueError('pax must be at least 1')
+        return v
+
+    @field_validator('unit_price', 'discount', 'line_total')
+    @classmethod
+    def validate_amounts(cls, v):
+        if v < 0:
+            raise ValueError('amounts must be non-negative')
+        return v
+
+
+class BookingItemCreate(BookingItemBase):
+    """Booking item creation schema"""
+    pass
+
+
+class BookingItemUpdate(BaseModel):
+    """Booking item update schema"""
+    package_id: Optional[int] = None
+    unit_price: Optional[condecimal(max_digits=15, decimal_places=2)] = None
+    discount: Optional[condecimal(max_digits=15, decimal_places=2)] = None
+    pax: Optional[int] = None
+    line_total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
+
+    @field_validator('pax')
+    @classmethod
+    def validate_pax(cls, v):
+        if v is not None and v < 1:
+            raise ValueError('pax must be at least 1')
+        return v
+
+    @field_validator('unit_price', 'discount', 'line_total')
+    @classmethod
+    def validate_amounts(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('amounts must be non-negative')
+        return v
+
+
+class BookingItemInDB(BookingItemBase):
+    """Booking item in database schema"""
+    id: int
+    booking_id: int
+    created_at: datetime
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class BookingItem(BookingItemInDB):
+    """Booking item schema for API responses"""
+    package: Optional[dict] = None  # Will be populated with Package schema
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+# ============================================================================
+# Booking History Schemas
+# ============================================================================
+
+class BookingHistoryBase(BaseModel):
+    """Base booking history schema"""
+    field_name: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    change_type: BookingChangeType
+
+
+class BookingHistoryCreate(BookingHistoryBase):
+    """Booking history creation schema"""
+    booking_id: int
+    user_id: int
+
+
+class BookingHistory(BookingHistoryBase):
+    """Booking history schema"""
+    id: int
+    booking_id: int
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+# ============================================================================
+# Booking Villa Schemas
+# ============================================================================
+
 class BookingVillaBase(BaseModel):
     """Base booking villa schema"""
     villa_id: int
+    check_in: date
+    check_out: date
+    nightly_rate: condecimal(max_digits=15, decimal_places=2)
+    total_nights: int
+    villa_total: condecimal(max_digits=15, decimal_places=2)
+
+    @field_validator('check_out')
+    @classmethod
+    def validate_check_out(cls, v, info):
+        if 'check_in' in info.data and v <= info.data['check_in']:
+            raise ValueError('check_out must be after check_in')
+        return v
+
+    @field_validator('nightly_rate', 'villa_total')
+    @classmethod
+    def validate_amounts(cls, v):
+        if v < 0:
+            raise ValueError('amounts must be non-negative')
+        return v
+
+    @field_validator('total_nights')
+    @classmethod
+    def validate_total_nights(cls, v):
+        if v < 1:
+            raise ValueError('total_nights must be at least 1')
+        return v
 
 
-class BookingVillaCreate(BookingVillaBase):
-    """Booking villa creation schema"""
-    pass
+class BookingVillaCreate(BaseModel):
+    """Booking villa creation schema (simplified for API)"""
+    villa_id: int
 
 
-class BookingVilla(BookingVillaBase):
-    """Booking villa schema"""
+class BookingVillaUpdate(BaseModel):
+    """Booking villa update schema"""
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
+    nightly_rate: Optional[condecimal(max_digits=15, decimal_places=2)] = None
+    total_nights: Optional[int] = None
+    villa_total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
+
+    @field_validator('check_out')
+    @classmethod
+    def validate_check_out(cls, v, info):
+        if v is not None and 'check_in' in info.data and info.data['check_in'] is not None:
+            if v <= info.data['check_in']:
+                raise ValueError('check_out must be after check_in')
+        return v
+
+    @field_validator('nightly_rate', 'villa_total')
+    @classmethod
+    def validate_amounts(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('amounts must be non-negative')
+        return v
+
+    @field_validator('total_nights')
+    @classmethod
+    def validate_total_nights(cls, v):
+        if v is not None and v < 1:
+            raise ValueError('total_nights must be at least 1')
+        return v
+
+
+class BookingVillaInDB(BookingVillaBase):
+    """Booking villa in database schema"""
     id: int
     booking_id: int
     assigned_at: datetime
+    assigned_by: Optional[int] = None
 
     class Config:
         """Pydantic config"""
         from_attributes = True
 
 
-class BookingPackageBase(BaseModel):
-    """Base booking package schema"""
-    package_name: str
-    package_price: condecimal(max_digits=10, decimal_places=2)
-    notes: Optional[str] = None
-
-
-class BookingPackageCreate(BookingPackageBase):
-    """Booking package creation schema"""
-    pass
-
-
-class BookingPackage(BookingPackageBase):
-    """Booking package schema"""
-    id: int
-    booking_id: int
+class BookingVilla(BookingVillaInDB):
+    """Booking villa schema for API responses"""
+    villa: Optional[dict] = None  # Will be populated with Villa schema
 
     class Config:
         """Pydantic config"""
         from_attributes = True
 
 
-class BookingAddonBase(BaseModel):
-    """Base booking addon schema"""
-    service_name: str
-    service_price: condecimal(max_digits=10, decimal_places=2)
-    quantity: int = 1
-
-
-class BookingAddonCreate(BookingAddonBase):
-    """Booking addon creation schema"""
-    pass
-
-
-class BookingAddon(BookingAddonBase):
-    """Booking addon schema"""
-    id: int
-    booking_id: int
-
-    class Config:
-        """Pydantic config"""
-        from_attributes = True
-
+# ============================================================================
+# Main Booking Schemas
+# ============================================================================
 
 class BookingBase(BaseModel):
     """Base booking schema"""
-    guest_name: str
-    guest_email: Optional[EmailStr] = None
-    guest_phone: Optional[str] = None
+    customer_id: int
     check_in: date
     check_out: date
-    total_pax: int
+    total_pax: int = 1
+    status: BookingStatus = BookingStatus.pending
     notes: Optional[str] = None
+    sales_person_id: Optional[int] = None
+
+    @field_validator('check_out')
+    @classmethod
+    def validate_check_out(cls, v, info):
+        if 'check_in' in info.data and v <= info.data['check_in']:
+            raise ValueError('check_out must be after check_in')
+        return v
+
+    @field_validator('total_pax')
+    @classmethod
+    def validate_total_pax(cls, v):
+        if v < 1:
+            raise ValueError('total_pax must be at least 1')
+        return v
 
 
 class BookingCreate(BookingBase):
     """Booking creation schema"""
-    villas: List[BookingVillaCreate]
-    packages: Optional[List[BookingPackageCreate]] = None
-    addons: Optional[List[BookingAddonCreate]] = None
-    
-    @field_validator('guest_phone')
-    @classmethod
-    def validate_phone_number(cls, v):
-        return sanitize_phone_number(v)
+    villas: List[BookingVillaCreate] = []
+    items: List[BookingItemCreate] = []
 
 
 class BookingUpdate(BaseModel):
     """Booking update schema"""
-    guest_name: Optional[str] = None
-    guest_email: Optional[EmailStr] = None
-    guest_phone: Optional[str] = None
+    customer_id: Optional[int] = None
     check_in: Optional[date] = None
     check_out: Optional[date] = None
     total_pax: Optional[int] = None
-    status: Optional[str] = None
+    status: Optional[BookingStatus] = None
     notes: Optional[str] = None
-    
-    @field_validator('guest_phone')
+    sales_person_id: Optional[int] = None
+    items: Optional[List[BookingItemCreate]] = None
+
+    @field_validator('check_out')
     @classmethod
-    def validate_phone_number(cls, v):
-        return sanitize_phone_number(v)
+    def validate_check_out(cls, v, info):
+        if v is not None and 'check_in' in info.data and info.data['check_in'] is not None:
+            if v <= info.data['check_in']:
+                raise ValueError('check_out must be after check_in')
+        return v
+
+    @field_validator('total_pax')
+    @classmethod
+    def validate_total_pax(cls, v):
+        if v is not None and v < 1:
+            raise ValueError('total_pax must be at least 1')
+        return v
 
 
 class BookingStatusUpdate(BaseModel):
     """Booking status update schema"""
-    status: str = Field(..., description="Booking status (pending, confirmed, ongoing, completed, cancelled)")
+    status: BookingStatus = Field(..., description="Booking status (pending, confirmed, checked_in, checked_out, completed, cancelled)")
 
 
-class Booking(BookingBase):
-    """Booking schema"""
+class BookingInDB(BookingBase):
+    """Booking in database schema"""
     id: int
+    user_id: int
     booking_code: str
-    status: str
-    created_by: Optional[int] = None
+    total: condecimal(max_digits=15, decimal_places=2)
+    tax_total: condecimal(max_digits=15, decimal_places=2)
+    amount_paid: condecimal(max_digits=15, decimal_places=2)
+    amount_due: condecimal(max_digits=15, decimal_places=2)
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class Booking(BookingInDB):
+    """Booking schema for API responses"""
+    customer: Optional[dict] = None  # Customer schema
+    items: List[BookingItem] = []
     villas: List[BookingVilla] = []
-    packages: List[BookingPackage] = []
-    addons: List[BookingAddon] = []
 
     class Config:
         """Pydantic config"""
@@ -136,12 +321,56 @@ class Booking(BookingBase):
 
 
 class BookingDetail(Booking):
-    """Booking detail schema"""
-    total_price: condecimal(max_digits=10, decimal_places=2)
-    total_paid: condecimal(max_digits=10, decimal_places=2)
-    balance: condecimal(max_digits=10, decimal_places=2)
+    """Detailed booking schema with history"""
+    history: List[BookingHistory] = []
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
 
 
+class BookingSummary(BaseModel):
+    """Booking summary schema for lists"""
+    id: int
+    booking_code: str
+    customer_name: str
+    check_in: date
+    check_out: date
+    status: BookingStatus
+    total: condecimal(max_digits=15, decimal_places=2)
+    amount_due: condecimal(max_digits=15, decimal_places=2)
+    created_at: datetime
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class BookingListResponse(BaseModel):
+    """Response schema for booking list endpoint"""
+    bookings: List[Booking]
+    total: int
+    skip: int
+    limit: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class BookingCalculationResponse(BaseModel):
+    """Response schema for booking calculation endpoint"""
+    subtotal: condecimal(max_digits=15, decimal_places=2)
+    tax_total: condecimal(max_digits=15, decimal_places=2)
+    total: condecimal(max_digits=15, decimal_places=2)
+    taxes_applied: List[dict] = []
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+# Legacy response schemas for backward compatibility
 class BookingResponse(Booking):
     """Booking response schema for API"""
     pass
@@ -155,25 +384,3 @@ class BookingDetailResponse(BookingDetail):
 class BookingVillaResponse(BookingVilla):
     """Booking villa response schema for API"""
     pass
-
-
-class BookingPackageResponse(BookingPackage):
-    """Booking package response schema for API"""
-    pass
-
-
-class BookingAddonResponse(BookingAddon):
-    """Booking addon response schema for API"""
-    pass
-
-
-class BookingListResponse(BaseModel):
-    """Response schema for booking list endpoint"""
-    bookings: List[BookingResponse]
-    total: int
-    skip: int
-    limit: int
-
-    class Config:
-        """Pydantic config"""
-        from_attributes = True
