@@ -13,7 +13,7 @@ from app.schemas.booking import (
     BookingCreate, BookingUpdate, BookingStatusUpdate,
     Booking, BookingDetail, BookingListResponse,
     BookingItemCreate, BookingItemUpdate, BookingItem,
-    BookingVillaCreate, BookingVillaUpdate, BookingVilla,
+    BookingVillaCreate, BookingVilla,
     BookingHistory, BookingStatus
 )
 from app.services.booking import (
@@ -32,11 +32,11 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 async def list_bookings(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    status: Optional[BookingStatus] = Query(None, description="Filter by booking status"),
+    status: Optional[str] = Query(None, description="Filter by booking status"),
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
     search: Optional[str] = Query(None, description="Search by booking code or customer name"),
-    check_in_from: Optional[date] = Query(None, description="Filter by check-in date from"),
-    check_in_to: Optional[date] = Query(None, description="Filter by check-in date to"),
+    check_in_from: Optional[str] = Query(None, description="Filter by check-in date from"),
+    check_in_to: Optional[str] = Query(None, description="Filter by check-in date to"),
     villa_id: Optional[int] = Query(None, description="Filter by villa ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -44,16 +44,54 @@ async def list_bookings(
     """
     Get list of bookings with optional filtering and search
     """
+    # Convert empty strings to None
+    status = status if status and status.strip() else None
+    search = search if search and search.strip() else None
+    check_in_from = check_in_from if check_in_from and check_in_from.strip() else None
+    check_in_to = check_in_to if check_in_to and check_in_to.strip() else None
+    
+    # Validate and convert status to enum if provided
+    status_enum = None
+    if status:
+        try:
+            status_enum = BookingStatus(status.lower())
+        except ValueError:
+            valid_statuses = [s.value for s in BookingStatus]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status value. Must be one of: {', '.join(valid_statuses)}"
+            )
+    
+    # Parse and validate dates if provided
+    check_in_from_date = None
+    check_in_to_date = None
+    if check_in_from:
+        try:
+            check_in_from_date = date.fromisoformat(check_in_from)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid check_in_from date format. Use YYYY-MM-DD"
+            )
+    if check_in_to:
+        try:
+            check_in_to_date = date.fromisoformat(check_in_to)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid check_in_to date format. Use YYYY-MM-DD"
+            )
+    
     bookings = get_bookings(
         db=db,
         current_user=current_user,
         skip=skip,
         limit=limit,
-        status=status,
+        status=status_enum,
         customer_id=customer_id,
         search=search,
-        check_in_from=check_in_from,
-        check_in_to=check_in_to,
+        check_in_from=check_in_from_date,
+        check_in_to=check_in_to_date,
         villa_id=villa_id
     )
     
@@ -63,11 +101,11 @@ async def list_bookings(
         current_user=current_user,
         skip=0,
         limit=10000,
-        status=status,
+        status=status_enum,
         customer_id=customer_id,
         search=search,
-        check_in_from=check_in_from,
-        check_in_to=check_in_to,
+        check_in_from=check_in_from_date,
+        check_in_to=check_in_to_date,
         villa_id=villa_id
     ))
     
@@ -77,25 +115,6 @@ async def list_bookings(
         "skip": skip,
         "limit": limit
     }
-
-
-@router.get("/statistics", response_model=dict)
-async def get_booking_statistics_endpoint(
-    from_date: Optional[date] = Query(None, description="Statistics from date"),
-    to_date: Optional[date] = Query(None, description="Statistics to date"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Get booking statistics for dashboard
-    """
-    stats = get_booking_statistics(
-        db=db,
-        current_user=current_user,
-        from_date=from_date,
-        to_date=to_date
-    )
-    return stats
 
 
 @router.post("", response_model=Booking, status_code=status.HTTP_201_CREATED)
@@ -119,6 +138,77 @@ async def create_booking_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+
+@router.get("/statistics", response_model=dict)
+async def get_booking_statistics_endpoint(
+    from_date: Optional[str] = Query(None, description="Statistics from date"),
+    to_date: Optional[str] = Query(None, description="Statistics to date"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get booking statistics for dashboard
+    """
+    # Convert empty strings to None
+    from_date = from_date if from_date and from_date.strip() else None
+    to_date = to_date if to_date and to_date.strip() else None
+    
+    # Parse and validate dates if provided
+    from_date_obj = None
+    to_date_obj = None
+    if from_date:
+        try:
+            from_date_obj = date.fromisoformat(from_date)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid from_date format. Use YYYY-MM-DD"
+            )
+    if to_date:
+        try:
+            to_date_obj = date.fromisoformat(to_date)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid to_date format. Use YYYY-MM-DD"
+            )
+    
+    stats = get_booking_statistics(
+        db=db,
+        current_user=current_user,
+        from_date=from_date_obj,
+        to_date=to_date_obj
+    )
+    return stats
+
+
+@router.get("/create", response_model=dict)
+async def get_create_booking_data(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get data needed for creating a booking (customers, villas, packages)
+    """
+    from app.services.customer import get_customers
+    from app.services.villa import get_villas
+    from app.services.package import get_packages
+    
+    # Fetch customers for dropdown
+    customers = get_customers(db=db, current_user=current_user, skip=0, limit=1000)
+    
+    # Fetch active villas for selection
+    villas = get_villas(db=db, skip=0, limit=1000, is_active=True)
+    
+    # Fetch packages for selection
+    packages = get_packages(db=db, user_id=None, skip=0, limit=1000)
+    
+    return {
+        "customers": [{"id": c.id, "name": c.name, "email": c.email, "phone_number": c.phone_number} for c in customers],
+        "villas": [{"id": v.id, "name": v.name, "room_type": v.room_type, "capacity": v.capacity, "base_price": float(v.base_price)} for v in villas],
+        "packages": [{"id": p.id, "name": p.name, "category": p.category, "type": p.type, "cost_per_pax": float(p.cost_per_pax), "days": p.days} for p in packages]
+    }
 
 
 @router.get("/{booking_id}", response_model=Booking)
@@ -311,35 +401,6 @@ async def add_villa_to_booking(
             current_user=current_user
         )
         return booking_villa
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
-
-@router.put("/{booking_id}/villas/{villa_id}", response_model=BookingVilla)
-async def update_villa_in_booking(
-    booking_id: int,
-    villa_id: int,
-    villa_update: BookingVillaUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Update villa assignment in a booking
-    """
-    try:
-        # Convert Pydantic model to dict for update
-        update_data = villa_update.dict(exclude_unset=True)
-        updated_villa = update_booking_villa(
-            db=db,
-            booking_id=booking_id,
-            villa_id=villa_id,
-            villa_update=update_data,
-            current_user=current_user
-        )
-        return updated_villa
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

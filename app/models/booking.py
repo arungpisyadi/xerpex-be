@@ -99,34 +99,24 @@ class BookingItem(Base):
 
 
 class BookingVilla(Base):
-    """Booking villa model for villa assignments"""
+    """Booking villa model - simple junction table for booking-villa associations"""
     __tablename__ = "booking_villas"
     
     id = Column(Integer, primary_key=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
     villa_id = Column(Integer, ForeignKey("villas.id", ondelete="CASCADE"), nullable=False)
-    check_in = Column(Date, nullable=False)
-    check_out = Column(Date, nullable=False)
-    nightly_rate = Column(Numeric(15, 2), nullable=False)
-    total_nights = Column(Integer, nullable=False)
-    villa_total = Column(Numeric(15, 2), nullable=False)
-    assigned_at = Column(DateTime, default=datetime.utcnow)
-    assigned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     # Relationships
     booking = relationship("Booking", back_populates="villas")
     villa = relationship("Villa", back_populates="bookings")
-    assigner = relationship("User", foreign_keys=[assigned_by])
     
     # Constraints
     __table_args__ = (
-        CheckConstraint("check_out > check_in", name="check_booking_villa_dates"),
-        CheckConstraint("nightly_rate >= 0", name="check_booking_villa_rate"),
         {"sqlite_autoincrement": True},
     )
     
     def __repr__(self):
-        return f"<BookingVilla(id={self.id}, booking_id={self.booking_id}, villa_id={self.villa_id}, nights={self.total_nights})>"
+        return f"<BookingVilla(id={self.id}, booking_id={self.booking_id}, villa_id={self.villa_id})>"
 
 
 class BookingHistory(Base):

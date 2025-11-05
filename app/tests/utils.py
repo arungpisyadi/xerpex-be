@@ -112,18 +112,14 @@ def create_test_booking_villa(
     nightly_rate: Decimal = Decimal("1000000.00")
 ) -> BookingVilla:
     """
-    Create a test booking villa
+    Create a test booking villa (simplified junction table)
+    Note: check_in, check_out, and nightly_rate parameters are kept for
+    backward compatibility but not used in the simplified model.
     """
-    total_nights = (check_out - check_in).days
     booking_villa = BookingVilla(
         booking_id=booking_id,
         villa_id=villa_id,
-        check_in=check_in,
-        check_out=check_out,
-        nightly_rate=nightly_rate,
-        total_nights=total_nights,
-        villa_total=nightly_rate * total_nights,
-        assigned_at=datetime.utcnow()
+        created_at=datetime.utcnow()
     )
     db.add(booking_villa)
     db.commit()

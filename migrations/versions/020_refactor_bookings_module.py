@@ -295,120 +295,10 @@ def upgrade() -> None:
             LEFT JOIN packages p ON p.name = ba.service_name
         """)
     
-    # Step 11: Add new columns to booking_villas table (only if they don't exist)
-    with op.batch_alter_table('booking_villas', schema=None) as batch_op:
-        if not column_exists('booking_villas', 'check_in'):
-            batch_op.add_column(sa.Column('check_in', sa.Date(), nullable=True))
-        
-        if not column_exists('booking_villas', 'check_out'):
-            batch_op.add_column(sa.Column('check_out', sa.Date(), nullable=True))
-        
-        if not column_exists('booking_villas', 'nightly_rate'):
-            batch_op.add_column(sa.Column('nightly_rate', sa.Numeric(15, 2), nullable=True))
-        
-        if not column_exists('booking_villas', 'total_nights'):
-            batch_op.add_column(sa.Column('total_nights', sa.Integer(), nullable=True))
-        
-        if not column_exists('booking_villas', 'villa_total'):
-            batch_op.add_column(sa.Column('villa_total', sa.Numeric(15, 2), nullable=True))
-        
-        if not column_exists('booking_villas', 'assigned_by'):
-            batch_op.add_column(sa.Column('assigned_by', sa.Integer(), nullable=True))
+    # Step 11: booking_villas remains as simple junction table (no additional columns needed)
+    # The table already has: id, booking_id, villa_id, created_at
     
-    # Step 12: Migrate data in booking_villas table (only for columns that exist)
-    update_fields = []
-    if column_exists('booking_villas', 'check_in'):
-        update_fields.append("check_in = (SELECT check_in FROM bookings WHERE id = bv.booking_id)")
-    if column_exists('booking_villas', 'check_out'):
-        update_fields.append("check_out = (SELECT check_out FROM bookings WHERE id = bv.booking_id)")
-    if column_exists('booking_villas', 'nightly_rate'):
-        update_fields.append("nightly_rate = (SELECT base_price FROM villas WHERE id = bv.villa_id)")
-    if column_exists('booking_villas', 'total_nights'):
-        update_fields.append("""total_nights = (
-            SELECT DATEDIFF(check_out, check_in)
-            FROM bookings
-            WHERE id = bv.booking_id
-        )""")
-    if column_exists('booking_villas', 'assigned_by') and column_exists('bookings', 'user_id'):
-        update_fields.append("assigned_by = (SELECT user_id FROM bookings WHERE id = bv.booking_id)")
-    
-    if update_fields:
-        op.execute(f"""
-            UPDATE booking_villas bv
-            SET {', '.join(update_fields)}
-        """)
-    
-    # Calculate villa_total (nightly_rate * total_nights)
-    if column_exists('booking_villas', 'villa_total') and column_exists('booking_villas', 'nightly_rate') and column_exists('booking_villas', 'total_nights'):
-        op.execute("""
-            UPDATE booking_villas
-            SET villa_total = nightly_rate * total_nights
-            WHERE villa_total IS NULL OR villa_total = 0
-        """)
-    
-    # Step 13: Make nullable columns non-nullable in booking_villas after data migration
-    with op.batch_alter_table('booking_villas', schema=None) as batch_op:
-        if column_exists('booking_villas', 'check_in'):
-            batch_op.alter_column('check_in',
-                            existing_type=sa.Date(),
-                            nullable=False,
-                            existing_nullable=True)
-        
-        if column_exists('booking_villas', 'check_out'):
-            batch_op.alter_column('check_out',
-                            existing_type=sa.Date(),
-                            nullable=False,
-                            existing_nullable=True)
-        
-        if column_exists('booking_villas', 'nightly_rate'):
-            batch_op.alter_column('nightly_rate',
-                            existing_type=sa.Numeric(15, 2),
-                            nullable=False,
-                            existing_nullable=True)
-        
-        if column_exists('booking_villas', 'total_nights'):
-            batch_op.alter_column('total_nights',
-                            existing_type=sa.Integer(),
-                            nullable=False,
-                            existing_nullable=True)
-        
-        if column_exists('booking_villas', 'villa_total'):
-            batch_op.alter_column('villa_total',
-                            existing_type=sa.Numeric(15, 2),
-                            nullable=False,
-                            existing_nullable=True)
-    
-    # Step 14: Add foreign key for assigned_by in booking_villas (only if column exists)
-    villa_inspector = sa.inspect(connection)
-    existing_villa_fks = [fk['name'] for fk in villa_inspector.get_foreign_keys('booking_villas')]
-    
-    if column_exists('booking_villas', 'assigned_by') and 'fk_booking_villas_assigned_by' not in existing_villa_fks:
-        op.create_foreign_key('fk_booking_villas_assigned_by', 'booking_villas', 'users',
-                             ['assigned_by'], ['id'], ondelete='SET NULL')
-    
-    # Step 15: Add check constraint for booking_villas dates (only if columns exist)
-    if column_exists('booking_villas', 'check_in') and column_exists('booking_villas', 'check_out'):
-        try:
-            op.create_check_constraint(
-                'check_booking_villa_dates',
-                'booking_villas',
-                'check_out > check_in'
-            )
-        except:
-            pass  # Constraint might already exist
-    
-    # Step 16: Add check constraint for nightly_rate (only if column exists)
-    if column_exists('booking_villas', 'nightly_rate'):
-        try:
-            op.create_check_constraint(
-                'check_booking_villa_rate',
-                'booking_villas',
-                'nightly_rate >= 0'
-            )
-        except:
-            pass  # Constraint might already exist
-    
-    # Step 17: Create initial history records for existing bookings
+    # Step 12: Create initial history records for existing bookings
     if table_exists('booking_history'):
         op.execute("""
             INSERT INTO booking_history (booking_id, user_id, field_name, old_value, new_value, change_type, created_at)
@@ -423,7 +313,7 @@ def upgrade() -> None:
             FROM bookings
         """)
     
-    # Step 18: Drop redundant guest columns from bookings table
+    # Step 13: Drop redundant guest columns from bookings table
     with op.batch_alter_table('bookings', schema=None) as batch_op:
         if column_exists('bookings', 'guest_name'):
             batch_op.drop_column('guest_name')
@@ -434,7 +324,7 @@ def upgrade() -> None:
         if column_exists('bookings', 'guest_phone'):
             batch_op.drop_column('guest_phone')
     
-    # Step 19: Drop old tables (booking_packages and booking_addons)
+    # Step 14: Drop old tables (booking_packages and booking_addons)
     if table_exists('booking_addons'):
         op.drop_table('booking_addons')
     if table_exists('booking_packages'):
@@ -497,34 +387,21 @@ def downgrade() -> None:
         JOIN packages p ON bi.package_id = p.id
     """)
     
-    # Step 6: Drop check constraints from booking_villas
-    op.drop_constraint('check_booking_villa_rate', 'booking_villas', type_='check')
-    op.drop_constraint('check_booking_villa_dates', 'booking_villas', type_='check')
+    # Step 6: booking_villas remains as simple junction table (no columns to drop)
     
-    # Step 7: Drop foreign key from booking_villas
-    op.drop_constraint('fk_booking_villas_assigned_by', 'booking_villas', type_='foreignkey')
-    
-    # Step 8: Remove new columns from booking_villas
-    op.drop_column('booking_villas', 'assigned_by')
-    op.drop_column('booking_villas', 'villa_total')
-    op.drop_column('booking_villas', 'total_nights')
-    op.drop_column('booking_villas', 'nightly_rate')
-    op.drop_column('booking_villas', 'check_out')
-    op.drop_column('booking_villas', 'check_in')
-    
-    # Step 9: Drop indexes from bookings table
+    # Step 7: Drop indexes from bookings table
     op.drop_index('ix_bookings_status', 'bookings')
     op.drop_index('ix_bookings_check_in', 'bookings')
     op.drop_index('ix_bookings_booking_code', 'bookings')
     op.drop_index('ix_bookings_customer_id', 'bookings')
     op.drop_index('ix_bookings_user_id', 'bookings')
     
-    # Step 10: Drop foreign key constraints from bookings
+    # Step 8: Drop foreign key constraints from bookings
     op.drop_constraint('fk_bookings_sales_person_id', 'bookings', type_='foreignkey')
     op.drop_constraint('fk_bookings_customer_id', 'bookings', type_='foreignkey')
     op.drop_constraint('fk_bookings_user_id', 'bookings', type_='foreignkey')
     
-    # Step 11: Remove new columns from bookings table
+    # Step 9: Remove new columns from bookings table
     op.drop_column('bookings', 'amount_due')
     op.drop_column('bookings', 'amount_paid')
     op.drop_column('bookings', 'tax_total')
@@ -533,17 +410,17 @@ def downgrade() -> None:
     op.drop_column('bookings', 'customer_id')
     op.drop_column('bookings', 'user_id')
     
-    # Step 12: Drop status constraint and recreate old one
+    # Step 10: Drop status constraint and recreate old one
     op.drop_constraint('check_booking_status', 'bookings', type_='check')
     
-    # Step 13: Drop booking_history table
+    # Step 11: Drop booking_history table
     op.drop_index('ix_booking_history_created_at', 'booking_history')
     op.drop_index('ix_booking_history_user_id', 'booking_history')
     op.drop_index('ix_booking_history_booking_id', 'booking_history')
     op.drop_index('ix_booking_history_id', 'booking_history')
     op.drop_table('booking_history')
     
-    # Step 14: Drop booking_items table
+    # Step 12: Drop booking_items table
     op.drop_index('ix_booking_items_package_id', 'booking_items')
     op.drop_index('ix_booking_items_booking_id', 'booking_items')
     op.drop_index('ix_booking_items_id', 'booking_items')

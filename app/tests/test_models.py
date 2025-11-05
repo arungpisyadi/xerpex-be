@@ -105,7 +105,7 @@ def test_booking_model(db: Session):
 
 
 def test_booking_villa_model(db: Session):
-    """Test BookingVilla model"""
+    """Test BookingVilla model (simplified junction table)"""
     # Create villa and booking
     villa = create_test_villa(db)
     booking = create_test_booking(db)
@@ -117,7 +117,7 @@ def test_booking_villa_model(db: Session):
     assert booking_villa.id is not None
     assert booking_villa.booking_id == booking.id
     assert booking_villa.villa_id == villa.id
-    assert booking_villa.assigned_at is not None
+    assert booking_villa.created_at is not None
 
 
 def test_payment_model(db: Session):

@@ -215,23 +215,23 @@ def create_booking(db: Session, booking: BookingCreate, current_user: User) -> B
                 )
         
         # Check if villas exist and are available
-        for villa_data in booking.villas:
-            villa = get_villa(db, villa_data.villa_id)
+        for villa_id in booking.villas:
+            villa = get_villa(db, villa_id)
             if not villa:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Villa with ID {villa_data.villa_id} not found"
+                    detail=f"Villa with ID {villa_id} not found"
                 )
             
             # Check availability
             is_available, unavailable_dates = check_villa_availability(
-                db, villa_data.villa_id, booking.check_in, booking.check_out
+                db, villa_id, booking.check_in, booking.check_out
             )
             
             if not is_available:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Villa with ID {villa_data.villa_id} is not available for the selected dates"
+                    detail=f"Villa with ID {villa_id} is not available for the selected dates"
                 )
         
         # Generate unique booking code
@@ -292,23 +292,16 @@ def create_booking(db: Session, booking: BookingCreate, current_user: User) -> B
             db.add(booking_item)
             items_total += item_data.line_total
         
-        # Add villas to booking
+        # Add villas to booking (simple junction table)
         villas_total = Decimal('0.00')
-        for villa_data in booking.villas:
-            villa = get_villa(db, villa_data.villa_id)
+        for villa_id in booking.villas:
+            villa = get_villa(db, villa_id)
             nights = calculate_nights(booking.check_in, booking.check_out)
             villa_total = villa.base_price * nights
             
             booking_villa = BookingVilla(
                 booking_id=db_booking.id,
-                villa_id=villa_data.villa_id,
-                check_in=booking.check_in,
-                check_out=booking.check_out,
-                nightly_rate=villa.base_price,
-                total_nights=nights,
-                villa_total=villa_total,
-                assigned_at=datetime.utcnow(),
-                assigned_by=current_user.id
+                villa_id=villa_id
             )
             
             db.add(booking_villa)
@@ -316,7 +309,7 @@ def create_booking(db: Session, booking: BookingCreate, current_user: User) -> B
             
             # Update villa availability
             update_villa_availability(
-                db, villa_data.villa_id, booking.check_in, booking.check_out,
+                db, villa_id, booking.check_in, booking.check_out,
                 booking_code, current_user.id, is_available=False
             )
         
@@ -969,21 +962,10 @@ def add_booking_villa(
                 detail=f"Villa with ID {villa.villa_id} is not available for the booking dates"
             )
         
-        # Calculate villa totals
-        nights = calculate_nights(db_booking.check_in, db_booking.check_out)
-        villa_total = villa_obj.base_price * nights
-        
-        # Add villa to booking
+        # Add villa to booking (simple junction table)
         booking_villa = BookingVilla(
             booking_id=booking_id,
-            villa_id=villa.villa_id,
-            check_in=db_booking.check_in,
-            check_out=db_booking.check_out,
-            nightly_rate=villa_obj.base_price,
-            total_nights=nights,
-            villa_total=villa_total,
-            assigned_at=datetime.utcnow(),
-            assigned_by=current_user.id
+            villa_id=villa.villa_id
         )
         
         db.add(booking_villa)
@@ -1032,17 +1014,20 @@ def update_booking_villa(
     current_user: User
 ) -> BookingVilla:
     """
-    Update booking villa
+    Update booking villa (simplified - junction table has no editable fields)
+    
+    Note: Since booking_villas is now a simple junction table, this function
+    is kept for API compatibility but has no fields to update.
     
     Args:
         db: Database session
         booking_id: Booking ID
         villa_id: Villa ID
-        villa_update: Villa update data
+        villa_update: Villa update data (ignored)
         current_user: Current user (for role-based access control)
         
     Returns:
-        BookingVilla: Updated booking villa
+        BookingVilla: Booking villa record
         
     Raises:
         HTTPException: If booking or villa not found
@@ -1053,13 +1038,6 @@ def update_booking_villa(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Booking not found"
-            )
-        
-        # Check if booking can be modified
-        if db_booking.status in ['completed', 'cancelled']:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot modify booking with status '{db_booking.status}'"
             )
         
         booking_villa = db.query(BookingVilla).filter(
@@ -1073,29 +1051,17 @@ def update_booking_villa(
                 detail="Villa not found in booking"
             )
         
-        # Update villa fields
-        for key, value in villa_update.items():
-            if hasattr(booking_villa, key):
-                setattr(booking_villa, key, value)
-        
-        # Recalculate totals
-        recalculate_booking_totals(db, booking_id, current_user)
-        
-        db.commit()
-        db.refresh(booking_villa)
-        
-        logger.info(f"Updated villa {villa_id} in booking {booking_id} by user {current_user.id}")
+        # No fields to update in simple junction table
+        logger.info(f"Booking villa {villa_id} in booking {booking_id} - no updates needed (junction table)")
         return booking_villa
         
     except HTTPException:
-        db.rollback()
         raise
     except Exception as e:
-        db.rollback()
-        logger.error(f"Error updating villa {villa_id} in booking {booking_id}: {str(e)}")
+        logger.error(f"Error accessing villa {villa_id} in booking {booking_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating villa: {str(e)}"
+            detail=f"Error accessing villa: {str(e)}"
         )
 
 
@@ -1190,7 +1156,9 @@ def remove_booking_villa(
 
 def calculate_booking_totals(
     items: List[BookingItem],
-    villas: List[BookingVilla]
+    villas: List[BookingVilla],
+    check_in: date,
+    check_out: date
 ) -> Dict[str, Decimal]:
     """
     Calculate booking totals
@@ -1198,12 +1166,21 @@ def calculate_booking_totals(
     Args:
         items: List of booking items
         villas: List of booking villas
+        check_in: Booking check-in date
+        check_out: Booking check-out date
         
     Returns:
         Dict: Dictionary with subtotal, tax_total, and total
     """
     items_subtotal = sum(item.line_total for item in items)
-    villas_subtotal = sum(villa.villa_total for villa in villas)
+    
+    # Calculate villa subtotal from booking dates and villa base prices
+    nights = calculate_nights(check_in, check_out)
+    villas_subtotal = Decimal('0.00')
+    for booking_villa in villas:
+        if booking_villa.villa and booking_villa.villa.base_price:
+            villas_subtotal += booking_villa.villa.base_price * nights
+    
     subtotal = items_subtotal + villas_subtotal
     
     return {
@@ -1239,7 +1216,12 @@ def recalculate_booking_totals(
         )
     
     # Calculate totals
-    totals = calculate_booking_totals(db_booking.items, db_booking.villas)
+    totals = calculate_booking_totals(
+        db_booking.items,
+        db_booking.villas,
+        db_booking.check_in,
+        db_booking.check_out
+    )
     
     # Update booking
     db_booking.total = totals['total']

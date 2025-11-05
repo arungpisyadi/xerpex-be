@@ -460,7 +460,6 @@ class TestBookingVillaManagement:
         # Assert
         assert new_villa.id is not None
         assert new_villa.villa_id == test_villa.id
-        assert new_villa.total_nights == 3
         
         # Verify booking total was recalculated
         updated_booking = get_booking(db, booking.id, user_obj)
@@ -658,7 +657,7 @@ class TestBookingCalculations:
         assert updated_booking.total == initial_total + Decimal("500000.00")
     
     def test_villa_total_calculation(self, db: Session, test_user, test_customer, test_villa):
-        """Test villa total calculation based on nights"""
+        """Test villa total calculation based on nights (calculated from booking dates)"""
         # Arrange
         user_obj = db.query(User).filter(User.id == test_user["id"]).first()
         check_in = date.today() + timedelta(days=7)
@@ -676,11 +675,8 @@ class TestBookingCalculations:
         # Act
         booking = create_booking(db, booking_data, user_obj)
         
-        # Assert
-        villa_booking = booking.villas[0]
-        assert villa_booking.total_nights == 5
+        # Assert - villa totals are calculated from booking dates, not stored in junction table
         expected_villa_total = test_villa.base_price * 5
-        assert villa_booking.villa_total == expected_villa_total
         assert booking.total == expected_villa_total
 
 

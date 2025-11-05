@@ -1,6 +1,8 @@
 """
 Booking schemas for the XerpeX ERP System
 """
+from __future__ import annotations
+
 from datetime import datetime, date
 from typing import Optional, List, Literal
 from decimal import Decimal
@@ -8,6 +10,10 @@ from enum import Enum
 from pydantic import BaseModel, EmailStr, condecimal, Field, field_validator
 
 from app.utils.helpers import sanitize_phone_number
+from app.schemas.customer import Customer
+from app.schemas.package import Package
+from app.schemas.villa import Villa
+from app.schemas.user import UserResponse
 
 
 # Booking status enum
@@ -96,7 +102,7 @@ class BookingItemInDB(BookingItemBase):
 
 class BookingItem(BookingItemInDB):
     """Booking item schema for API responses"""
-    package: Optional[dict] = None  # Will be populated with Package schema
+    package: Optional[Package] = None  # Will be populated with Package schema
 
     class Config:
         """Pydantic config"""
@@ -138,78 +144,19 @@ class BookingHistory(BookingHistoryBase):
 # ============================================================================
 
 class BookingVillaBase(BaseModel):
-    """Base booking villa schema"""
-    villa_id: int
-    check_in: date
-    check_out: date
-    nightly_rate: condecimal(max_digits=15, decimal_places=2)
-    total_nights: int
-    villa_total: condecimal(max_digits=15, decimal_places=2)
-
-    @field_validator('check_out')
-    @classmethod
-    def validate_check_out(cls, v, info):
-        if 'check_in' in info.data and v <= info.data['check_in']:
-            raise ValueError('check_out must be after check_in')
-        return v
-
-    @field_validator('nightly_rate', 'villa_total')
-    @classmethod
-    def validate_amounts(cls, v):
-        if v < 0:
-            raise ValueError('amounts must be non-negative')
-        return v
-
-    @field_validator('total_nights')
-    @classmethod
-    def validate_total_nights(cls, v):
-        if v < 1:
-            raise ValueError('total_nights must be at least 1')
-        return v
-
-
-class BookingVillaCreate(BaseModel):
-    """Booking villa creation schema (simplified for API)"""
+    """Base booking villa schema - simple junction table"""
     villa_id: int
 
 
-class BookingVillaUpdate(BaseModel):
-    """Booking villa update schema"""
-    check_in: Optional[date] = None
-    check_out: Optional[date] = None
-    nightly_rate: Optional[condecimal(max_digits=15, decimal_places=2)] = None
-    total_nights: Optional[int] = None
-    villa_total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
-
-    @field_validator('check_out')
-    @classmethod
-    def validate_check_out(cls, v, info):
-        if v is not None and 'check_in' in info.data and info.data['check_in'] is not None:
-            if v <= info.data['check_in']:
-                raise ValueError('check_out must be after check_in')
-        return v
-
-    @field_validator('nightly_rate', 'villa_total')
-    @classmethod
-    def validate_amounts(cls, v):
-        if v is not None and v < 0:
-            raise ValueError('amounts must be non-negative')
-        return v
-
-    @field_validator('total_nights')
-    @classmethod
-    def validate_total_nights(cls, v):
-        if v is not None and v < 1:
-            raise ValueError('total_nights must be at least 1')
-        return v
+class BookingVillaCreate(BookingVillaBase):
+    """Booking villa creation schema"""
+    pass
 
 
 class BookingVillaInDB(BookingVillaBase):
     """Booking villa in database schema"""
     id: int
     booking_id: int
-    assigned_at: datetime
-    assigned_by: Optional[int] = None
 
     class Config:
         """Pydantic config"""
@@ -218,7 +165,7 @@ class BookingVillaInDB(BookingVillaBase):
 
 class BookingVilla(BookingVillaInDB):
     """Booking villa schema for API responses"""
-    villa: Optional[dict] = None  # Will be populated with Villa schema
+    villa: Optional[Villa] = None  # Will be populated with Villa schema
 
     class Config:
         """Pydantic config"""
@@ -256,8 +203,16 @@ class BookingBase(BaseModel):
 
 class BookingCreate(BookingBase):
     """Booking creation schema"""
-    villas: List[BookingVillaCreate] = []
+    villas: List[int] = []
     items: List[BookingItemCreate] = []
+    
+    @field_validator('villas')
+    @classmethod
+    def validate_unique_villas(cls, v):
+        """Ensure villas are unique"""
+        if len(v) != len(set(v)):
+            raise ValueError('villas must be unique')
+        return v
 
 
 class BookingUpdate(BaseModel):
@@ -311,7 +266,8 @@ class BookingInDB(BookingBase):
 
 class Booking(BookingInDB):
     """Booking schema for API responses"""
-    customer: Optional[dict] = None  # Customer schema
+    customer: Optional[Customer] = None  # Customer schema
+    sales_person: Optional[UserResponse] = None  # Sales person who handled this booking
     items: List[BookingItem] = []
     villas: List[BookingVilla] = []
 
