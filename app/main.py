@@ -173,7 +173,7 @@ app.include_router(package.router, prefix=settings.API_V1_STR)
 app.include_router(app_settings.router, prefix=settings.API_V1_STR)
 
 # Include new invoicing system routers
-print(f"DEBUG: Including customer router with prefix {settings.API_V1_STR}")
+# print(f"DEBUG: Including customer router with prefix {settings.API_V1_STR}")
 app.include_router(customer.router, prefix=settings.API_V1_STR)
 app.include_router(tax.router, prefix=settings.API_V1_STR)
 app.include_router(quote.router, prefix=settings.API_V1_STR)

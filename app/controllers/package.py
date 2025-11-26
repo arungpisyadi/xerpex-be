@@ -31,7 +31,7 @@ async def read_packages(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get all packages with optional filtering and search (user isolated)
+    Get all packages with optional filtering and search (no user isolation)
     
     Args:
         skip: Number of records to skip
@@ -42,14 +42,13 @@ async def read_packages(
         max_cost: Filter by maximum cost per pax
         search: Search by name (partial match)
         db: Database session
-        current_user: Current user for isolation
+        current_user: Current user (required for authentication)
         
     Returns:
-        List[Package]: List of packages
+        List[Package]: List of all packages visible to all users
     """
     packages = get_packages(
         db,
-        user_id=current_user.id,
         skip=skip,
         limit=limit,
         category=category,
@@ -88,12 +87,12 @@ async def read_package(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get a package by ID with user isolation
+    Get a package by ID (no user isolation)
     
     Args:
         package_id: Package ID
         db: Database session
-        current_user: Current user for isolation
+        current_user: Current user (required for authentication)
         
     Returns:
         Package: Package
@@ -101,7 +100,7 @@ async def read_package(
     Raises:
         HTTPException: If package not found
     """
-    db_package = get_package(db, package_id=package_id, user_id=current_user.id)
+    db_package = get_package(db, package_id=package_id)
     if db_package is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -163,16 +162,16 @@ async def get_categories(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get all unique package categories with user isolation
+    Get all unique package categories (no user isolation)
     
     Args:
         db: Database session
-        current_user: Current user for isolation
+        current_user: Current user (required for authentication)
         
     Returns:
-        List[str]: List of unique categories
+        List[str]: List of unique categories from all packages
     """
-    return get_package_categories(db, user_id=current_user.id)
+    return get_package_categories(db)
 
 
 @router.get("/meta/types", response_model=List[str])
@@ -181,13 +180,13 @@ async def get_types(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get all unique package types with user isolation
+    Get all unique package types (no user isolation)
     
     Args:
         db: Database session
-        current_user: Current user for isolation
+        current_user: Current user (required for authentication)
         
     Returns:
-        List[str]: List of unique types
+        List[str]: List of unique types from all packages
     """
-    return get_package_types(db, user_id=current_user.id)
+    return get_package_types(db)

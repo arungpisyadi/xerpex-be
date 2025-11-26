@@ -1,7 +1,7 @@
 """
 Customer API controllers for the XerpeX ERP System
 """
-print("DEBUG: Loading customer controller")
+# print("DEBUG: Loading customer controller")
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -19,7 +19,7 @@ from app.services.customer import (
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/customers", tags=["customers"])
-print(f"DEBUG: Customer router created: {router}")
+# print(f"DEBUG: Customer router created: {router}")
 
 
 @router.get("", response_model=CustomerListResponse)
