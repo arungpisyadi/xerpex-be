@@ -500,21 +500,35 @@ Response:
 [
   {
     "id": 1,
+    "invoice_id": 1,
     "booking_id": 1,
     "amount": 1000.00,
     "payment_method": "credit_card",
+    "payment_date": "2025-07-15",
+    "payment_type": "down-payment",
     "status": "completed",
-    "transaction_id": "txn_123456",
+    "reference_number": "REF123456",
+    "notes": "Initial payment",
+    "created_by": 1,
+    "invoice_number": "INV-2025-001",
+    "customer_name": "John Doe",
     "created_at": "2025-07-15T10:35:00",
     "updated_at": "2025-07-15T10:35:00"
   },
   {
     "id": 2,
-    "booking_id": 2,
-    "amount": 875.00,
+    "invoice_id": 2,
+    "booking_id": null,
+    "amount": 500.00,
     "payment_method": "bank_transfer",
-    "status": "pending",
-    "transaction_id": null,
+    "payment_date": "2025-07-16",
+    "payment_type": "installment",
+    "status": "partial",
+    "reference_number": "REF789012",
+    "notes": "Second installment",
+    "created_by": 1,
+    "invoice_number": "INV-2025-002",
+    "customer_name": "Jane Smith",
     "created_at": "2025-07-16T14:25:00",
     "updated_at": "2025-07-16T14:25:00"
   }
@@ -531,11 +545,18 @@ Response:
 ```json
 {
   "id": 1,
+  "invoice_id": 1,
   "booking_id": 1,
   "amount": 1000.00,
   "payment_method": "credit_card",
+  "payment_date": "2025-07-15",
+  "payment_type": "down-payment",
   "status": "completed",
-  "transaction_id": "txn_123456",
+  "reference_number": "REF123456",
+  "notes": "Initial payment",
+  "created_by": 1,
+  "invoice_number": "INV-2025-001",
+  "customer_name": "John Doe",
   "created_at": "2025-07-15T10:35:00",
   "updated_at": "2025-07-15T10:35:00"
 }
@@ -550,25 +571,88 @@ POST /api/v1/payments/
 Request body:
 ```json
 {
-  "booking_id": 3,
-  "amount": 1000.00,
-  "payment_method": "credit_card"
+  "invoice_id": 1,
+  "amount": 500.00,
+  "payment_method": "cash",
+  "payment_date": "2025-11-26",
+  "reference_number": "REF-001",
+  "notes": "Cash payment for invoice",
+  "status": "partial",
+  "payment_type": "down-payment"
 }
 ```
+
+**Required Fields:**
+- `invoice_id` (integer): ID of the invoice this payment is for
+- `amount` (decimal > 0): Payment amount
+- `payment_method` (string): Payment method used
+- `status` (string): Payment status - "partial" or "full"
+- `payment_type` (string): Type of payment - "down-payment", "installment", or "paid-off"
+
+**Optional Fields:**
+- `payment_date` (date, YYYY-MM-DD): Date of payment (default: today)
+- `reference_number` (string): External reference or transaction number
+- `notes` (string): Additional notes about the payment
+
+**Payment Method Options:**
+- `cash`: Cash payment
+- `bank_transfer`: Bank wire transfer
+- `credit_card`: Credit card payment
+- `debit_card`: Debit card payment
+- `digital_wallet`: Digital wallet (e.g., PayPal, Venmo)
+- `check`: Check payment
+- `other`: Other payment methods
+
+**Payment Status Options:**
+- `partial`: Payment partially covers the invoice amount
+- `full`: Payment fully covers the invoice amount
+- `pending`: Payment is pending confirmation
+- `completed`: Payment has been completed
+- `failed`: Payment failed
+- `refunded`: Payment has been refunded
+
+**Payment Type Options:**
+- `down-payment`: Initial deposit payment
+- `installment`: Installment payment towards total
+- `paid-off`: Final payment completing the invoice
 
 Response:
 ```json
 {
   "id": 3,
-  "booking_id": 3,
-  "amount": 1000.00,
-  "payment_method": "credit_card",
-  "status": "pending",
-  "transaction_id": null,
-  "created_at": "2025-07-17T14:40:00",
-  "updated_at": "2025-07-17T14:40:00"
+  "invoice_id": 1,
+  "booking_id": null,
+  "amount": 500.00,
+  "payment_method": "cash",
+  "payment_date": "2025-11-26",
+  "payment_type": "down-payment",
+  "status": "partial",
+  "reference_number": "REF-001",
+  "notes": "Cash payment for invoice",
+  "created_by": 1,
+  "invoice_number": "INV-2025-001",
+  "customer_name": "John Doe",
+  "created_at": "2025-11-26T14:40:00",
+  "updated_at": "2025-11-26T14:40:00"
 }
 ```
+
+**Response Fields:**
+- `id` (integer): Payment ID
+- `invoice_id` (integer): ID of the associated invoice
+- `booking_id` (integer, nullable): Optional ID of the associated booking
+- `amount` (decimal): Payment amount
+- `payment_method` (string): Method used for payment
+- `payment_date` (date): Date the payment was made
+- `payment_type` (string): Type of payment (down-payment, installment, or paid-off)
+- `status` (string): Current status of the payment
+- `reference_number` (string, nullable): External reference number
+- `notes` (string, nullable): Additional payment notes
+- `created_by` (integer): ID of the user who created this payment record
+- `invoice_number` (string, nullable): Invoice number for reference
+- `customer_name` (string, nullable): Customer name for reference
+- `created_at` (datetime): Timestamp when payment was created
+- `updated_at` (datetime): Timestamp when payment was last updated
 
 ### Update Payment Status
 
@@ -579,8 +663,7 @@ PATCH /api/v1/payments/{payment_id}/status
 Request body:
 ```json
 {
-  "status": "completed",
-  "transaction_id": "txn_789012"
+  "status": "completed"
 }
 ```
 
@@ -588,13 +671,20 @@ Response:
 ```json
 {
   "id": 3,
-  "booking_id": 3,
-  "amount": 1000.00,
-  "payment_method": "credit_card",
+  "invoice_id": 1,
+  "booking_id": null,
+  "amount": 500.00,
+  "payment_method": "cash",
+  "payment_date": "2025-11-26",
+  "payment_type": "down-payment",
   "status": "completed",
-  "transaction_id": "txn_789012",
-  "created_at": "2025-07-17T14:40:00",
-  "updated_at": "2025-07-17T14:45:00"
+  "reference_number": "REF-001",
+  "notes": "Cash payment for invoice",
+  "created_by": 1,
+  "invoice_number": "INV-2025-001",
+  "customer_name": "John Doe",
+  "created_at": "2025-11-26T14:40:00",
+  "updated_at": "2025-11-26T14:45:00"
 }
 ```
 

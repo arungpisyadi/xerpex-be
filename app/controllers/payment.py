@@ -78,7 +78,7 @@ async def get_payment_statistics_endpoint(
     """
     Get payment statistics for dashboard
     """
-    stats = get_payment_statistics(db=db, user_id=current_user.id)
+    stats = get_payment_statistics(db=db, created_by=current_user.id)
     return stats
 
 
@@ -108,7 +108,7 @@ async def create_payment_endpoint(
         db_payment = create_payment(
             db=db,
             payment=payment,
-            user_id=current_user.id
+            created_by=current_user.id
         )
         return db_payment
     except ValueError as e:
@@ -151,7 +151,7 @@ async def update_payment_endpoint(
             db=db,
             payment_id=payment_id,
             payment_update=payment_update,
-            user_id=current_user.id
+            created_by=current_user.id
         )
         return updated_payment
     except ValueError as e:
@@ -176,7 +176,7 @@ async def update_payment_status_endpoint(
             db=db,
             payment_id=payment_id,
             status_update=status_update,
-            user_id=current_user.id
+            created_by=current_user.id
         )
         return updated_payment
     except ValueError as e:
@@ -198,7 +198,7 @@ async def delete_payment_endpoint(
     success = delete_payment(
         db=db,
         payment_id=payment_id,
-        user_id=current_user.id
+        created_by=current_user.id
     )
     if not success:
         raise HTTPException(
@@ -223,7 +223,7 @@ async def confirm_payment(
             db=db,
             payment_id=payment_id,
             status_update=status_update,
-            user_id=current_user.id
+            created_by=current_user.id
         )
         return updated_payment
     except ValueError as e:
@@ -248,7 +248,7 @@ async def fail_payment(
             db=db,
             payment_id=payment_id,
             status_update=status_update,
-            user_id=current_user.id
+            created_by=current_user.id
         )
         return updated_payment
     except ValueError as e:
@@ -273,7 +273,7 @@ async def refund_payment(
             db=db,
             payment_id=payment_id,
             status_update=status_update,
-            user_id=current_user.id
+            created_by=current_user.id
         )
         return updated_payment
     except ValueError as e:

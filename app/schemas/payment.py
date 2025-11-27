@@ -25,6 +25,8 @@ class PaymentStatus(str, Enum):
     completed = "completed"
     failed = "failed"
     refunded = "refunded"
+    partial = "partial"
+    full = "full"
 
 
 class PaymentMethod(str, Enum):
@@ -36,6 +38,13 @@ class PaymentMethod(str, Enum):
     digital_wallet = "digital_wallet"
     check = "check"
     other = "other"
+
+
+class PaymentType(str, Enum):
+    """Payment type enumeration"""
+    down_payment = "down-payment"
+    installment = "installment"
+    paid_off = "paid-off"
 
 
 class InvoiceHistoryEventCategory(str, Enum):
@@ -240,7 +249,8 @@ class PaymentBase(BaseModel):
 
 class PaymentCreate(PaymentBase):
     """Payment creation schema"""
-    pass
+    status: PaymentStatus = Field(..., description="Payment status: partial (partial payment) or full (full payment)")
+    payment_type: PaymentType = Field(..., description="Type of payment: down-payment, installment, or paid-off")
 
 
 class PaymentUpdate(BaseModel):
@@ -260,8 +270,10 @@ class PaymentStatusUpdate(BaseModel):
 class PaymentResponse(PaymentBase):
     """Payment response schema"""
     id: int
-    user_id: int
-    status: PaymentStatus
+    created_by: int = Field(..., description="ID of the user who created the payment")
+    booking_id: Optional[int] = Field(None, description="Related booking ID if applicable")
+    payment_type: str = Field(..., description="Type of payment (down-payment, installment, or paid-off)")
+    status: PaymentStatus = Field(..., description="Current status of the payment")
     invoice_number: Optional[str] = None
     customer_name: Optional[str] = None
     created_at: datetime

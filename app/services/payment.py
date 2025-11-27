@@ -575,7 +575,7 @@ def get_payment(db: Session, payment_id: int, current_user: User) -> Optional[Pa
     ).filter(Payment.id == payment_id)
     
     # Apply user isolation based on role
-    user_filter = get_user_filter_condition(current_user, Payment.user_id)
+    user_filter = get_user_filter_condition(current_user, Payment.created_by)
     if user_filter is not True:  # True means no filter (admin/finance)
         query = query.filter(user_filter)
     
@@ -615,7 +615,7 @@ def get_payments(
     )
     
     # Apply user isolation based on role
-    user_filter = get_user_filter_condition(current_user, Payment.user_id)
+    user_filter = get_user_filter_condition(current_user, Payment.created_by)
     if user_filter is not True:  # True means no filter (admin/finance)
         query = query.filter(user_filter)
     
@@ -638,14 +638,14 @@ def get_payments(
     return query.order_by(Payment.created_at.desc()).offset(skip).limit(limit).all()
 
 
-def create_payment(db: Session, payment: PaymentCreate, user_id: int) -> Payment:
+def create_payment(db: Session, payment: PaymentCreate, created_by: int) -> Payment:
     """
     Create a new payment
     
     Args:
         db: Database session
         payment: Payment data
-        user_id: Current user ID for isolation
+        created_by: Current user ID for isolation
         
     Returns:
         Payment: Created payment
@@ -654,10 +654,14 @@ def create_payment(db: Session, payment: PaymentCreate, user_id: int) -> Payment
         HTTPException: If invoice not found or validation fails
     """
     # Validate invoice exists and belongs to user
-    # Create a temporary user object for the internal call
+    # Get the actual user from database to check their role
     from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-    invoice = get_invoice(db, payment.invoice_id, temp_user)
+    actual_user = db.query(User).filter(User.id == created_by).first()
+    if not actual_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Use actual user for invoice lookup (respects admin privileges)
+    invoice = get_invoice(db, payment.invoice_id, actual_user)
     if not invoice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -673,13 +677,15 @@ def create_payment(db: Session, payment: PaymentCreate, user_id: int) -> Payment
     
     # Create payment
     db_payment = Payment(
-        user_id=user_id,
+        created_by=created_by,
         invoice_id=payment.invoice_id,
+        booking_id=payment.booking_id if hasattr(payment, 'booking_id') else None,
         amount=payment.amount,
         payment_method=payment.payment_method,
+        payment_type=payment.payment_type if hasattr(payment, 'payment_type') else None,
         payment_date=payment.payment_date,
         reference_number=payment.reference_number,
-        status=PaymentStatus.pending,
+        status=payment.status if hasattr(payment, 'status') else PaymentStatus.pending,
         notes=payment.notes,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
@@ -689,11 +695,24 @@ def create_payment(db: Session, payment: PaymentCreate, user_id: int) -> Payment
     db.commit()
     db.refresh(db_payment)
     
+    # Update invoice status based on payment status and type
+    if (db_payment.status == PaymentStatus.partial or
+        db_payment.payment_type in ["down-payment", "installment"]):
+        # Update invoice to partially_paid
+        db_payment.invoice.status = InvoiceStatus.partially_paid
+    elif (db_payment.status == PaymentStatus.full or
+          db_payment.payment_type == "paid-off"):
+        # Update invoice to paid
+        db_payment.invoice.status = InvoiceStatus.paid
+    
+    db.commit()
+    db.refresh(db_payment)
+    
     # Log history event for payment creation
     safe_log_invoice_history(
         db=db,
         invoice_id=payment.invoice_id,
-        user_id=user_id,
+        user_id=created_by,
         event_type="payment_added",
         event_category="payment",
         description=f"Payment of ${payment.amount} added",
@@ -702,11 +721,9 @@ def create_payment(db: Session, payment: PaymentCreate, user_id: int) -> Payment
             "amount": str(payment.amount),
             "payment_method": payment.payment_method,
             "reference_number": payment.reference_number
-        }
+        },
+        payment_id=db_payment.id
     )
-    
-    # Check if invoice is fully paid
-    _update_invoice_payment_status(db, invoice)
     
     return db_payment
 
@@ -715,7 +732,7 @@ def update_payment(
     db: Session,
     payment_id: int,
     payment_update: PaymentUpdate,
-    user_id: int
+    created_by: int
 ) -> Payment:
     """
     Update a payment
@@ -724,7 +741,7 @@ def update_payment(
         db: Database session
         payment_id: Payment ID
         payment_update: Payment update data
-        user_id: Current user ID for isolation
+        created_by: Current user ID for isolation
         
     Returns:
         Payment: Updated payment
@@ -734,7 +751,7 @@ def update_payment(
     """
     # Create a temporary user object for the internal call
     from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
+    temp_user = User(id=created_by, role='user')  # Default to regular user for isolation
     db_payment = get_payment(db, payment_id, temp_user)
     if not db_payment:
         raise HTTPException(
@@ -766,7 +783,7 @@ def update_payment_status(
     db: Session,
     payment_id: int,
     status_update: PaymentStatusUpdate,
-    user_id: int
+    created_by: int
 ) -> Payment:
     """
     Update payment status
@@ -775,7 +792,7 @@ def update_payment_status(
         db: Database session
         payment_id: Payment ID
         status_update: Status update data
-        user_id: Current user ID for isolation
+        created_by: Current user ID for isolation
         
     Returns:
         Payment: Updated payment
@@ -785,7 +802,7 @@ def update_payment_status(
     """
     # Create a temporary user object for the internal call
     from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
+    temp_user = User(id=created_by, role='user')  # Default to regular user for isolation
     db_payment = get_payment(db, payment_id, temp_user)
     if not db_payment:
         raise HTTPException(
@@ -814,7 +831,7 @@ def update_payment_status(
     safe_log_invoice_history(
         db=db,
         invoice_id=db_payment.invoice_id,
-        user_id=user_id,
+        user_id=created_by,
         event_type=event_type,
         event_category="payment",
         description=description,
@@ -823,23 +840,24 @@ def update_payment_status(
             "amount": str(db_payment.amount),
             "old_status": old_status.value if hasattr(old_status, 'value') else str(old_status),
             "new_status": status_update.status.value if hasattr(status_update.status, 'value') else str(status_update.status)
-        }
+        },
+        payment_id=db_payment.id
     )
     
-    # Update invoice payment status
+    # Update invoice payment status (handles partial/full payment)
     _update_invoice_payment_status(db, db_payment.invoice)
     
     return db_payment
 
 
-def delete_payment(db: Session, payment_id: int, user_id: int) -> bool:
+def delete_payment(db: Session, payment_id: int, created_by: int) -> bool:
     """
     Delete a payment
     
     Args:
         db: Database session
         payment_id: Payment ID
-        user_id: Current user ID for isolation
+        created_by: Current user ID for isolation
         
     Returns:
         bool: True if payment was deleted
@@ -849,7 +867,7 @@ def delete_payment(db: Session, payment_id: int, user_id: int) -> bool:
     """
     # Create a temporary user object for the internal call
     from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
+    temp_user = User(id=created_by, role='user')  # Default to regular user for isolation
     db_payment = get_payment(db, payment_id, temp_user)
     if not db_payment:
         raise HTTPException(
@@ -1086,30 +1104,30 @@ def get_invoice_statistics(db: Session, user_id: int) -> Dict[str, Any]:
     }
 
 
-def get_payment_statistics(db: Session, user_id: int) -> Dict[str, Any]:
+def get_payment_statistics(db: Session, created_by: int) -> Dict[str, Any]:
     """
     Get payment statistics for dashboard
     
     Args:
         db: Database session
-        user_id: Current user ID for isolation
+        created_by: Current user ID for isolation
         
     Returns:
         Dict: Payment statistics
     """
-    total_payments = db.query(Payment).filter(Payment.user_id == user_id).count()
+    total_payments = db.query(Payment).filter(Payment.created_by == created_by).count()
     
     method_counts = db.query(
         Payment.payment_method,
         func.count(Payment.id).label('count')
-    ).filter(Payment.user_id == user_id).group_by(Payment.payment_method).all()
+    ).filter(Payment.created_by == created_by).group_by(Payment.payment_method).all()
     
     # Calculate total amount
     total_amount = db.query(
         func.sum(Payment.amount)
     ).filter(
         and_(
-            Payment.user_id == user_id,
+            Payment.created_by == created_by,
             Payment.status == PaymentStatus.completed
         )
     ).scalar() or Decimal('0.00')
@@ -1117,7 +1135,7 @@ def get_payment_statistics(db: Session, user_id: int) -> Dict[str, Any]:
     # Recent payments
     recent_payments = db.query(Payment).options(
         joinedload(Payment.invoice).joinedload(Invoice.customer)
-    ).filter(Payment.user_id == user_id).order_by(
+    ).filter(Payment.created_by == created_by).order_by(
         Payment.created_at.desc()
     ).limit(5).all()
     
@@ -1137,7 +1155,8 @@ def log_invoice_history(
     event_type: str,
     event_category: str,
     description: str,
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
+    payment_id: Optional[int] = None
 ) -> Optional[InvoiceHistory]:
     """
     Log an invoice history event
@@ -1150,6 +1169,7 @@ def log_invoice_history(
         event_category: Category of event ('lifecycle', 'status', 'workflow', 'payment')
         description: Human-readable description of the event
         metadata: Optional additional event metadata
+        payment_id: Optional payment ID to link this history event to a payment
         
     Returns:
         InvoiceHistory: Created history record or None if failed
@@ -1158,6 +1178,7 @@ def log_invoice_history(
         history_record = InvoiceHistory(
             invoice_id=invoice_id,
             user_id=user_id,
+            payment_id=payment_id,
             event_type=event_type,
             event_category=event_category,
             description=description,
@@ -1185,7 +1206,8 @@ def safe_log_invoice_history(
     event_type: str,
     event_category: str,
     description: str,
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
+    payment_id: Optional[int] = None
 ) -> None:
     """
     Safely log invoice history event without breaking main operations
@@ -1198,6 +1220,7 @@ def safe_log_invoice_history(
         event_category: Category of event
         description: Description of the event
         metadata: Optional additional event metadata
+        payment_id: Optional payment ID to link this history event to a payment
     """
     try:
         log_invoice_history(
@@ -1207,7 +1230,8 @@ def safe_log_invoice_history(
             event_type=event_type,
             event_category=event_category,
             description=description,
-            metadata=metadata
+            metadata=metadata,
+            payment_id=payment_id
         )
     except Exception as e:
         # Log error but don't break main operation

@@ -13,27 +13,34 @@ class Payment(Base):
     __tablename__ = "payments"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     payment_date = Column(Date, nullable=False, default=date.today)
     payment_method = Column(String(50), nullable=False)
+    payment_type = Column(String(50), nullable=False)
     reference_number = Column(String(50), nullable=True)
     status = Column(String(20), nullable=False, default="pending")
     notes = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    user = relationship("User", back_populates="payments")
+    booking = relationship("Booking", back_populates="payments")
     invoice = relationship("Invoice", back_populates="payments")
+    creator = relationship("User", back_populates="created_payments")
+    history = relationship("InvoiceHistory", back_populates="payment")
     
     # Constraints
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'completed', 'failed', 'refunded')",
+            "status IN ('pending', 'completed', 'failed', 'refunded', 'partial', 'full')",
             name="check_payment_status"
         ),
+        Index('ix_payments_created_by', 'created_by'),
+        Index('ix_payments_booking_id', 'booking_id'),
+        Index('ix_payments_payment_type', 'payment_type'),
         {"sqlite_autoincrement": True},  # For SQLite compatibility
     )
 
@@ -110,6 +117,7 @@ class InvoiceHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    payment_id = Column(Integer, ForeignKey("payments.id", ondelete="CASCADE"), nullable=True)
     event_type = Column(String(50), nullable=False)
     event_category = Column(String(30), nullable=False)
     description = Column(Text, nullable=False)
@@ -119,6 +127,7 @@ class InvoiceHistory(Base):
     # Relationships
     invoice = relationship("Invoice", back_populates="history")
     user = relationship("User", back_populates="invoice_history")
+    payment = relationship("Payment", back_populates="history")
     
     # Constraints and Indexes
     __table_args__ = (
@@ -129,6 +138,7 @@ class InvoiceHistory(Base):
         Index('idx_invoice_history_invoice_id', 'invoice_id'),
         Index('idx_invoice_history_created_at_desc', 'created_at'),
         Index('idx_invoice_history_event_category', 'event_category'),
+        Index('idx_invoice_history_payment_id', 'payment_id'),
         Index('idx_invoice_history_composite', 'invoice_id', 'created_at', 'event_category'),
         {"sqlite_autoincrement": True},  # For SQLite compatibility
     )

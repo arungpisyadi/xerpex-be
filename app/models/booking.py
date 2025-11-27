@@ -51,6 +51,7 @@ class Booking(Base):
     items = relationship("BookingItem", back_populates="booking", cascade="all, delete-orphan")
     villas = relationship("BookingVilla", back_populates="booking", cascade="all, delete-orphan")
     history = relationship("BookingHistory", back_populates="booking", cascade="all, delete-orphan")
+    payments = relationship("Payment", back_populates="booking")
     
     # Constraints
     __table_args__ = (
