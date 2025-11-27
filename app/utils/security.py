@@ -239,7 +239,7 @@ def should_apply_user_isolation(user: User) -> bool:
     Returns:
         bool: True if user isolation should be applied, False for admin/finance roles
     """
-    return user.role not in ["admin", "finance"]
+    return user.role not in ["admin", "finance", "sales"]
 
 
 def get_user_filter_condition(user: User, model_user_id_field):
