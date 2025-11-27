@@ -17,7 +17,7 @@ from app.models.user import User
 from app.schemas.payment import (
     InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceNotesUpdate,
     PaymentCreate, PaymentUpdate, PaymentStatusUpdate,
-    QuoteToInvoiceRequest, InvoiceStatus, PaymentStatus
+    QuoteToInvoiceRequest, InvoiceStatus, PaymentStatus, PaymentMethod, PaymentType
 )
 from app.services.customer import get_customer
 from app.services.package import get_package
@@ -681,11 +681,11 @@ def create_payment(db: Session, payment: PaymentCreate, created_by: int) -> Paym
         invoice_id=payment.invoice_id,
         booking_id=payment.booking_id if hasattr(payment, 'booking_id') else None,
         amount=payment.amount,
-        payment_method=payment.payment_method,
-        payment_type=payment.payment_type if hasattr(payment, 'payment_type') else None,
+        payment_method=payment.payment_method.value if isinstance(payment.payment_method, PaymentMethod) else payment.payment_method,
+        payment_type=payment.payment_type.value if hasattr(payment, 'payment_type') and payment.payment_type else None,
         payment_date=payment.payment_date,
         reference_number=payment.reference_number,
-        status=payment.status if hasattr(payment, 'status') else PaymentStatus.pending,
+        status=payment.status.value if hasattr(payment, 'status') and payment.status else PaymentStatus.pending.value,
         notes=payment.notes,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
@@ -696,14 +696,14 @@ def create_payment(db: Session, payment: PaymentCreate, created_by: int) -> Paym
     db.refresh(db_payment)
     
     # Update invoice status based on payment status and type
-    if (db_payment.status == PaymentStatus.partial or
+    if (db_payment.status == PaymentStatus.partial.value or
         db_payment.payment_type in ["down-payment", "installment"]):
         # Update invoice to partially_paid
-        db_payment.invoice.status = InvoiceStatus.partially_paid
-    elif (db_payment.status == PaymentStatus.full or
+        db_payment.invoice.status = InvoiceStatus.partially_paid.value
+    elif (db_payment.status == PaymentStatus.full.value or
           db_payment.payment_type == "paid-off"):
         # Update invoice to paid
-        db_payment.invoice.status = InvoiceStatus.paid
+        db_payment.invoice.status = InvoiceStatus.paid.value
     
     db.commit()
     db.refresh(db_payment)
@@ -719,7 +719,7 @@ def create_payment(db: Session, payment: PaymentCreate, created_by: int) -> Paym
         metadata={
             "payment_id": db_payment.id,
             "amount": str(payment.amount),
-            "payment_method": payment.payment_method,
+            "payment_method": payment.payment_method.value if isinstance(payment.payment_method, PaymentMethod) else payment.payment_method,
             "reference_number": payment.reference_number
         },
         payment_id=db_payment.id

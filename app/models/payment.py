@@ -32,12 +32,8 @@ class Payment(Base):
     creator = relationship("User", back_populates="created_payments")
     history = relationship("InvoiceHistory", back_populates="payment")
     
-    # Constraints
+    # Indexes
     __table_args__ = (
-        CheckConstraint(
-            "status IN ('pending', 'completed', 'failed', 'refunded', 'partial', 'full')",
-            name="check_payment_status"
-        ),
         Index('ix_payments_created_by', 'created_by'),
         Index('ix_payments_booking_id', 'booking_id'),
         Index('ix_payments_payment_type', 'payment_type'),
