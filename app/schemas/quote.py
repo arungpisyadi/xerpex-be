@@ -4,7 +4,7 @@ Quote schemas for the XerpeX ERP System
 from datetime import datetime, date
 from typing import Optional, List, Literal
 from enum import Enum
-from pydantic import BaseModel, condecimal, validator, field_validator, Field
+from pydantic import BaseModel, condecimal, validator, field_validator, Field, AliasChoices
 from app.schemas.customer import Customer
 from app.schemas.package import Package
 from app.schemas.villa import Villa
@@ -128,7 +128,7 @@ class QuoteBase(BaseModel):
 
 class QuoteCreate(QuoteBase):
     """Quote creation schema"""
-    villas: List[int] = []
+    villas: List[int] = Field(default=[], validation_alias=AliasChoices('villa_ids', 'villas'))
     items: List[QuoteItemCreate] = []
     
     @field_validator('villas')
@@ -152,7 +152,7 @@ class QuoteUpdate(BaseModel):
     tax_total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
     notes: Optional[str] = None
     sales_person_id: Optional[int] = None
-    villas: Optional[List[int]] = None
+    villas: Optional[List[int]] = Field(default=None, validation_alias=AliasChoices('villa_ids', 'villas'))
     items: Optional[List[QuoteItemCreate]] = None
     
     @field_validator('villas')
