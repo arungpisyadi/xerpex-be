@@ -19,6 +19,8 @@ class Quote(Base):
     quote_number = Column(String(50), unique=True, nullable=False, index=True)
     issue_date = Column(Date, nullable=False, default=date.today)
     expiry_date = Column(Date, nullable=False)
+    check_in = Column(Date, nullable=True)
+    check_out = Column(Date, nullable=True)
     status = Column(String(20), nullable=False, default="draft")
     notes = Column(Text, nullable=True)
     total = Column(Numeric(10, 2), nullable=False, default=0.00)
@@ -31,6 +33,7 @@ class Quote(Base):
     customer = relationship("Customer", back_populates="quotes")
     sales_person = relationship("User", foreign_keys=[sales_person_id], back_populates="sales_person_quotes")
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
+    villas = relationship("QuoteVilla", back_populates="quote", cascade="all, delete-orphan")
     invoices = relationship("Invoice", back_populates="quote")
     
     # Constraints
@@ -64,3 +67,24 @@ class QuoteItem(Base):
     __table_args__ = (
         {"sqlite_autoincrement": True},  # For SQLite compatibility
     )
+
+
+class QuoteVilla(Base):
+    """Quote villa model - simple junction table for quote-villa associations"""
+    __tablename__ = "quote_villas"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quote_id = Column(Integer, ForeignKey("quotes.id", ondelete="CASCADE"), nullable=False)
+    villa_id = Column(Integer, ForeignKey("villas.id", ondelete="CASCADE"), nullable=False)
+    
+    # Relationships
+    quote = relationship("Quote", back_populates="villas")
+    villa = relationship("Villa", back_populates="quotes")
+    
+    # Constraints
+    __table_args__ = (
+        {"sqlite_autoincrement": True},
+    )
+    
+    def __repr__(self):
+        return f"<QuoteVilla(id={self.id}, quote_id={self.quote_id}, villa_id={self.villa_id})>"

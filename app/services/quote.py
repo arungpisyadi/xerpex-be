@@ -9,17 +9,19 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func
 
-from app.models.quote import Quote, QuoteItem
+from app.models.quote import Quote, QuoteItem, QuoteVilla
 from app.models.customer import Customer
 from app.models.package import Package
 from app.models.tax import Tax
 from app.models.user import User
+from app.models.villa import Villa
 from app.schemas.quote import (
     QuoteCreate, QuoteUpdate, QuoteStatusUpdate, QuoteItemCreate,
     QuoteConversionRequest, QuoteStatus
 )
 from app.services.customer import get_customer
 from app.services.package import get_package
+from app.services.villa import get_villa
 from app.services.tax import calculate_total_with_taxes
 from app.utils.helpers import generate_quote_number
 from app.utils.security import get_user_filter_condition, should_apply_user_isolation
@@ -39,7 +41,8 @@ def get_quote(db: Session, quote_id: int, current_user: User) -> Optional[Quote]
     """
     query = db.query(Quote).options(
         joinedload(Quote.customer),
-        joinedload(Quote.items).joinedload(QuoteItem.package)
+        joinedload(Quote.items).joinedload(QuoteItem.package),
+        joinedload(Quote.villas).joinedload(QuoteVilla.villa)
     ).filter(Quote.id == quote_id)
     
     # Apply user isolation based on role
@@ -79,7 +82,8 @@ def get_quotes(
         List[Quote]: List of quotes
     """
     query = db.query(Quote).options(
-        joinedload(Quote.customer)
+        joinedload(Quote.customer),
+        joinedload(Quote.villas).joinedload(QuoteVilla.villa)
     )
     
     # Apply user isolation based on role
@@ -143,6 +147,14 @@ def create_quote(db: Session, quote: QuoteCreate, current_user: User) -> Quote:
                 detail="Sales person not found"
             )
 
+    # Validate villas if provided (must happen before creating any records)
+    for villa_id in quote.villas:
+        villa = get_villa(db, villa_id)
+        if not villa:
+            # Raise ValueError for validation errors in service layer
+            # Controllers can catch and convert to HTTPException if needed
+            raise ValueError(f"Villa with ID {villa_id} not found")
+
     # Generate quote number
     quote_number = generate_quote_number()
 
@@ -158,6 +170,8 @@ def create_quote(db: Session, quote: QuoteCreate, current_user: User) -> Quote:
         quote_number=quote_number,
         issue_date=quote.issue_date,
         expiry_date=quote.expiry_date,
+        check_in=quote.check_in,
+        check_out=quote.check_out,
         status=quote.status,
         notes=quote.notes,
         total=Decimal('0.00'),
@@ -201,9 +215,22 @@ def create_quote(db: Session, quote: QuoteCreate, current_user: User) -> Quote:
         db.add(quote_item)
         total_amount += item_data.line_total
     
+    # Create quote-villa relationships
+    villas_total = Decimal('0.00')
+    for villa_id in quote.villas:
+        villa = get_villa(db, villa_id)
+        villa_total = villa.base_price  # For quotes, just use base price without nights calculation
+        
+        quote_villa = QuoteVilla(
+            quote_id=db_quote.id,
+            villa_id=villa_id
+        )
+        db.add(quote_villa)
+        villas_total += villa_total
+    
     # Update quote totals
-    db_quote.total = total_amount
-    db_quote.tax_total = quote.tax_total
+    db_quote.total = total_amount + villas_total
+    db_quote.tax_total = Decimal('0.00')
     
     db.commit()
     db.refresh(db_quote)
@@ -249,8 +276,8 @@ def update_quote(
             detail=f"Cannot modify quote with status '{db_quote.status}'"
         )
     
-    # Update quote fields
-    update_data = quote_update.dict(exclude_unset=True, exclude={'items'})
+    # Update quote fields (exclude items and villas as they're handled separately)
+    update_data = quote_update.dict(exclude_unset=True, exclude={'items', 'villas'})
     
     # Validate customer if being updated
     if 'customer_id' in update_data:
@@ -275,6 +302,14 @@ def update_quote(
     
     for key, value in update_data.items():
         setattr(db_quote, key, value)
+    
+    # Validate villas if provided in update (must happen before any changes)
+    if quote_update.villas is not None:
+        for villa_id in quote_update.villas:
+            villa = get_villa(db, villa_id)
+            if not villa:
+                # Raise ValueError for validation errors in service layer
+                raise ValueError(f"Villa with ID {villa_id} not found")
     
     # Update items if provided
     if quote_update.items is not None:
@@ -305,8 +340,52 @@ def update_quote(
             db.add(quote_item)
             total_amount += item_data.line_total
         
+        # Calculate villas total
+        villas_total = Decimal('0.00')
+        if quote_update.villas is not None:
+            # If villas are being updated, delete existing and add new ones
+            db.query(QuoteVilla).filter(QuoteVilla.quote_id == quote_id).delete()
+            
+            for villa_id in quote_update.villas:
+                villa = get_villa(db, villa_id)
+                villa_total = villa.base_price
+                
+                quote_villa = QuoteVilla(
+                    quote_id=db_quote.id,
+                    villa_id=villa_id
+                )
+                db.add(quote_villa)
+                villas_total += villa_total
+        else:
+            # Recalculate existing villas total
+            for quote_villa in db_quote.villas:
+                if quote_villa.villa:
+                    villas_total += quote_villa.villa.base_price
+        
         # Update totals
-        db_quote.total = total_amount
+        db_quote.total = total_amount + villas_total
+    elif quote_update.villas is not None:
+        # Only villas are being updated (items not provided)
+        # Delete existing villas and add new ones
+        db.query(QuoteVilla).filter(QuoteVilla.quote_id == quote_id).delete()
+        
+        villas_total = Decimal('0.00')
+        for villa_id in quote_update.villas:
+            villa = get_villa(db, villa_id)
+            villa_total = villa.base_price
+            
+            quote_villa = QuoteVilla(
+                quote_id=db_quote.id,
+                villa_id=villa_id
+            )
+            db.add(quote_villa)
+            villas_total += villa_total
+        
+        # Recalculate items total
+        items_total = sum(item.line_total for item in db_quote.items)
+        
+        # Update total
+        db_quote.total = items_total + villas_total
     
     db_quote.updated_at = datetime.utcnow()
     db.commit()
@@ -488,12 +567,13 @@ def calculate_quote_totals(
     """
     subtotal = sum(item.line_total for item in items)
     
-    if tax_ids:
-        taxes = db.query(Tax).filter(
-            and_(Tax.id.in_(tax_ids), Tax.user_id == user_id)
-        ).all()
-        
-        return calculate_total_with_taxes(subtotal, taxes)
+    # Always return tax_total as 0 regardless of tax_ids
+    # if tax_ids:
+    #     taxes = db.query(Tax).filter(
+    #         and_(Tax.id.in_(tax_ids), Tax.user_id == user_id)
+    #     ).all()
+    #
+    #     return calculate_total_with_taxes(subtotal, taxes)
     
     return {
         'subtotal': subtotal,

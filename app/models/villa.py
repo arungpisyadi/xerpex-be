@@ -25,6 +25,8 @@ class Villa(Base):
     # Relationships
     availabilities = relationship("VillaAvailability", back_populates="villa", cascade="all, delete-orphan")
     bookings = relationship("BookingVilla", back_populates="villa")
+    quotes = relationship("QuoteVilla", back_populates="villa")
+    invoices = relationship("InvoiceVilla", back_populates="villa")
 
 
 class VillaAvailability(Base):

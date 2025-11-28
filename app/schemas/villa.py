@@ -3,7 +3,7 @@ Villa schemas for the XerpeX ERP System
 """
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel, condecimal
+from pydantic import BaseModel, condecimal, Field, model_validator
 
 
 class VillaBase(BaseModel):
@@ -82,6 +82,21 @@ class AvailabilityCheck(BaseModel):
     villa_id: Optional[int] = None
     check_in: date
     check_out: date
+
+class AvailableVillasRequest(BaseModel):
+    """Schema for available villas query parameters"""
+    check_in: date = Field(..., description="Check-in date", example="2024-01-15")
+    check_out: date = Field(..., description="Check-out date", example="2024-01-20")
+    skip: int = Field(default=0, ge=0, description="Number of records to skip")
+    limit: int = Field(default=100, ge=1, le=1000, description="Maximum number of records to return")
+    
+    @model_validator(mode='after')
+    def validate_dates(self):
+        """Validate that check_out is after check_in"""
+        if self.check_out <= self.check_in:
+            raise ValueError('check_out must be after check_in')
+        return self
+
 
 
 class AvailabilityResponse(BaseModel):

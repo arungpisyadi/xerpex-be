@@ -9,11 +9,12 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func
 
-from app.models.payment import Invoice, InvoiceItem, Payment, InvoiceHistory
+from app.models.payment import Invoice, InvoiceItem, Payment, InvoiceHistory, InvoiceVilla
 from app.models.customer import Customer
 from app.models.package import Package
-from app.models.quote import Quote, QuoteItem
+from app.models.quote import Quote, QuoteItem, QuoteVilla
 from app.models.user import User
+from app.models.villa import Villa
 from app.schemas.payment import (
     InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceNotesUpdate,
     PaymentCreate, PaymentUpdate, PaymentStatusUpdate,
@@ -21,6 +22,7 @@ from app.schemas.payment import (
 )
 from app.services.customer import get_customer
 from app.services.package import get_package
+from app.services.villa import get_villa
 from app.utils.helpers import generate_invoice_number
 from app.utils.security import get_user_filter_condition, should_apply_user_isolation
 
@@ -41,6 +43,7 @@ def get_invoice(db: Session, invoice_id: int, current_user: User) -> Optional[In
     query = db.query(Invoice).options(
         joinedload(Invoice.customer),
         joinedload(Invoice.items).joinedload(InvoiceItem.package),
+        joinedload(Invoice.villas).joinedload(InvoiceVilla.villa),
         joinedload(Invoice.payments)
     ).filter(Invoice.id == invoice_id)
     
@@ -67,6 +70,7 @@ def get_invoice_by_number(db: Session, invoice_number: str, user_id: int) -> Opt
     return db.query(Invoice).options(
         joinedload(Invoice.customer),
         joinedload(Invoice.items).joinedload(InvoiceItem.package),
+        joinedload(Invoice.villas).joinedload(InvoiceVilla.villa),
         joinedload(Invoice.payments)
     ).filter(
         and_(Invoice.invoice_number == invoice_number, Invoice.user_id == user_id)
@@ -104,7 +108,8 @@ def get_invoices(
         List[Invoice]: List of invoices
     """
     query = db.query(Invoice).options(
-        joinedload(Invoice.customer)
+        joinedload(Invoice.customer),
+        joinedload(Invoice.villas).joinedload(InvoiceVilla.villa)
     )
     
     # Apply user isolation based on role
@@ -167,6 +172,14 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
             detail="Customer not found"
         )
     
+    # Validate villas if provided (must happen before creating any records)
+    for villa_id in invoice.villas:
+        villa = get_villa(db, villa_id)
+        if not villa:
+            # Raise ValueError for validation errors in service layer
+            # Controllers can catch and convert to HTTPException if needed
+            raise ValueError(f"Villa with ID {villa_id} not found")
+    
     # Generate invoice number
     invoice_number = generate_invoice_number()
     
@@ -183,11 +196,13 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
         quote_id=invoice.quote_id,
         issue_date=invoice.issue_date,
         due_date=invoice.due_date,
+        check_in=invoice.check_in,
+        check_out=invoice.check_out,
         status=invoice.status.value if hasattr(invoice.status, 'value') else str(invoice.status),
         payment_terms=invoice.payment_terms,
         notes=invoice.notes,
         total=Decimal('0.00'),
-        tax_total=invoice.tax_total,
+        tax_total=Decimal('0.00'),
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -220,8 +235,21 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
         db.add(invoice_item)
         total_amount += item_data.line_total
     
+    # Create invoice-villa relationships
+    villas_total = Decimal('0.00')
+    for villa_id in invoice.villas:
+        villa = get_villa(db, villa_id)
+        villa_total = villa.base_price  # For invoices, use base price like quotes
+        
+        invoice_villa = InvoiceVilla(
+            invoice_id=db_invoice.id,
+            villa_id=villa_id
+        )
+        db.add(invoice_villa)
+        villas_total += villa_total
+    
     # Update invoice total
-    db_invoice.total = total_amount + invoice.tax_total
+    db_invoice.total = total_amount + villas_total
     
     db.commit()
     db.refresh(db_invoice)
@@ -283,8 +311,8 @@ def update_invoice(
             detail=f"Cannot modify invoice with status '{db_invoice.status}'"
         )
     
-    # Update invoice fields
-    update_data = invoice_update.dict(exclude_unset=True, exclude={'items'})
+    # Update invoice fields (exclude items and villas as they're handled separately)
+    update_data = invoice_update.dict(exclude_unset=True, exclude={'items', 'villas'})
     
     # Validate customer if being updated
     if 'customer_id' in update_data:
@@ -297,6 +325,17 @@ def update_invoice(
     
     for key, value in update_data.items():
         setattr(db_invoice, key, value)
+    
+    # Force tax_total to always be 0
+    db_invoice.tax_total = Decimal('0.00')
+    
+    # Validate villas if provided in update (must happen before any changes)
+    if invoice_update.villas is not None:
+        for villa_id in invoice_update.villas:
+            villa = get_villa(db, villa_id)
+            if not villa:
+                # Raise ValueError for validation errors in service layer
+                raise ValueError(f"Villa with ID {villa_id} not found")
     
     # Update items if provided
     if invoice_update.items is not None:
@@ -327,8 +366,52 @@ def update_invoice(
             db.add(invoice_item)
             total_amount += item_data.line_total
         
+        # Calculate villas total
+        villas_total = Decimal('0.00')
+        if invoice_update.villas is not None:
+            # If villas are being updated, delete existing and add new ones
+            db.query(InvoiceVilla).filter(InvoiceVilla.invoice_id == invoice_id).delete()
+            
+            for villa_id in invoice_update.villas:
+                villa = get_villa(db, villa_id)
+                villa_total = villa.base_price
+                
+                invoice_villa = InvoiceVilla(
+                    invoice_id=db_invoice.id,
+                    villa_id=villa_id
+                )
+                db.add(invoice_villa)
+                villas_total += villa_total
+        else:
+            # Recalculate existing villas total
+            for invoice_villa in db_invoice.villas:
+                if invoice_villa.villa:
+                    villas_total += invoice_villa.villa.base_price
+        
+        # Update totals
+        db_invoice.total = total_amount + villas_total
+    elif invoice_update.villas is not None:
+        # Only villas are being updated (items not provided)
+        # Delete existing villas and add new ones
+        db.query(InvoiceVilla).filter(InvoiceVilla.invoice_id == invoice_id).delete()
+        
+        villas_total = Decimal('0.00')
+        for villa_id in invoice_update.villas:
+            villa = get_villa(db, villa_id)
+            villa_total = villa.base_price
+            
+            invoice_villa = InvoiceVilla(
+                invoice_id=db_invoice.id,
+                villa_id=villa_id
+            )
+            db.add(invoice_villa)
+            villas_total += villa_total
+        
+        # Recalculate items total
+        items_total = sum(item.line_total for item in db_invoice.items)
+        
         # Update total
-        db_invoice.total = total_amount + (db_invoice.tax_total or Decimal('0.00'))
+        db_invoice.total = items_total + villas_total
     
     db_invoice.updated_at = datetime.utcnow()
     db.commit()
@@ -914,7 +997,8 @@ def convert_quote_to_invoice(
     """
     # Get quote
     quote = db.query(Quote).options(
-        joinedload(Quote.items).joinedload(QuoteItem.package)
+        joinedload(Quote.items).joinedload(QuoteItem.package),
+        joinedload(Quote.villas).joinedload(QuoteVilla.villa)
     ).filter(
         and_(Quote.id == conversion_request.quote_id, Quote.user_id == user_id)
     ).first()
@@ -953,9 +1037,11 @@ def convert_quote_to_invoice(
         quote_id=quote.id,
         issue_date=conversion_request.issue_date,
         due_date=conversion_request.due_date,
+        check_in=quote.check_in,
+        check_out=quote.check_out,
         status=InvoiceStatus.draft,
         total=quote.total,
-        tax_total=quote.tax_total,
+        tax_total=Decimal('0.00'),
         notes=conversion_request.notes,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
@@ -976,6 +1062,14 @@ def convert_quote_to_invoice(
             created_at=datetime.utcnow()
         )
         db.add(invoice_item)
+    
+    # Copy quote villas to invoice villas
+    for quote_villa in quote.villas:
+        invoice_villa = InvoiceVilla(
+            invoice_id=db_invoice.id,
+            villa_id=quote_villa.villa_id
+        )
+        db.add(invoice_villa)
     
     db.commit()
     db.refresh(db_invoice)

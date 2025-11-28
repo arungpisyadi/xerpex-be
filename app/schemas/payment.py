@@ -6,7 +6,9 @@ from decimal import Decimal
 from typing import Optional, List
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, field_validator, root_validator
+
+from app.schemas.villa import Villa
 
 
 class InvoiceStatus(str, Enum):
@@ -85,7 +87,43 @@ class InvoiceHistoryListResponse(BaseModel):
         from_attributes = True
 
 
+# ============================================================================
+# Invoice Villa Schemas
+# ============================================================================
+
+class InvoiceVillaBase(BaseModel):
+    """Base invoice villa schema - simple junction table"""
+    villa_id: int
+
+
+class InvoiceVillaCreate(InvoiceVillaBase):
+    """Invoice villa creation schema"""
+    pass
+
+
+class InvoiceVillaInDB(InvoiceVillaBase):
+    """Invoice villa in database schema"""
+    id: int
+    invoice_id: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class InvoiceVilla(InvoiceVillaInDB):
+    """Invoice villa schema for API responses"""
+    villa: Optional[Villa] = None  # Will be populated with Villa schema
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+# ============================================================================
 # Invoice Item Schemas
+# ============================================================================
+
 class InvoiceItemBase(BaseModel):
     """Base invoice item schema"""
     package_id: int
@@ -142,12 +180,17 @@ class InvoiceItemResponse(InvoiceItemBase):
         from_attributes = True
 
 
+# ============================================================================
 # Invoice Schemas
+# ============================================================================
+
 class InvoiceBase(BaseModel):
     """Base invoice schema"""
     customer_id: int
     issue_date: date = Field(default_factory=date.today)
     due_date: date
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
     status: InvoiceStatus = InvoiceStatus.draft
     tax_total: Decimal = Field(default=Decimal('0.00'), ge=0)
     notes: Optional[str] = None
@@ -162,9 +205,18 @@ class InvoiceBase(BaseModel):
 
 class InvoiceCreate(InvoiceBase):
     """Invoice creation schema"""
+    villas: List[int] = []
     items: List[InvoiceItemCreate] = Field(..., min_items=1)
     quote_id: Optional[int] = None  # For quote-to-invoice conversion
     payment_terms: Optional[str] = "Due on receipt"  # Optional with default value
+    
+    @field_validator('villas')
+    @classmethod
+    def validate_unique_villas(cls, v):
+        """Ensure villas are unique"""
+        if len(v) != len(set(v)):
+            raise ValueError('villas must be unique')
+        return v
 
 
 class InvoiceUpdate(BaseModel):
@@ -172,10 +224,21 @@ class InvoiceUpdate(BaseModel):
     customer_id: Optional[int] = None
     issue_date: Optional[date] = None
     due_date: Optional[date] = None
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
     status: Optional[InvoiceStatus] = None
     tax_total: Optional[Decimal] = Field(None, ge=0)
     notes: Optional[str] = None
+    villas: Optional[List[int]] = None
     items: Optional[List[InvoiceItemCreate]] = None
+    
+    @field_validator('villas')
+    @classmethod
+    def validate_unique_villas(cls, v):
+        """Ensure villas are unique"""
+        if v is not None and len(v) != len(set(v)):
+            raise ValueError('villas must be unique')
+        return v
 
 
 class InvoiceStatusUpdate(BaseModel):
@@ -200,6 +263,7 @@ class InvoiceResponse(InvoiceBase):
     customer_email: Optional[str] = None
     billing_address: Optional[str] = None
     items: List[InvoiceItemResponse] = []
+    villas: List[InvoiceVilla] = []
     payments: List['PaymentResponse'] = []
     created_at: datetime
     updated_at: datetime

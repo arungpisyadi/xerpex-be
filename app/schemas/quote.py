@@ -4,9 +4,10 @@ Quote schemas for the XerpeX ERP System
 from datetime import datetime, date
 from typing import Optional, List, Literal
 from enum import Enum
-from pydantic import BaseModel, condecimal, validator, Field
+from pydantic import BaseModel, condecimal, validator, field_validator, Field
 from app.schemas.customer import Customer
 from app.schemas.package import Package
+from app.schemas.villa import Villa
 
 
 # Quote status enum
@@ -68,11 +69,50 @@ class QuoteItem(QuoteItemInDB):
         from_attributes = True
 
 
+# ============================================================================
+# Quote Villa Schemas
+# ============================================================================
+
+class QuoteVillaBase(BaseModel):
+    """Base quote villa schema - simple junction table"""
+    villa_id: int
+
+
+class QuoteVillaCreate(QuoteVillaBase):
+    """Quote villa creation schema"""
+    pass
+
+
+class QuoteVillaInDB(QuoteVillaBase):
+    """Quote villa in database schema"""
+    id: int
+    quote_id: int
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class QuoteVilla(QuoteVillaInDB):
+    """Quote villa schema for API responses"""
+    villa: Optional[Villa] = None  # Will be populated with Villa schema
+
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+# ============================================================================
+# Main Quote Schemas
+# ============================================================================
+
 class QuoteBase(BaseModel):
     """Base quote schema"""
     customer_id: int
     issue_date: date
     expiry_date: date
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
     status: QuoteStatus = "draft"
     total: condecimal(max_digits=15, decimal_places=2) = 0.00
     tax_total: condecimal(max_digits=15, decimal_places=2) = 0.00
@@ -88,7 +128,16 @@ class QuoteBase(BaseModel):
 
 class QuoteCreate(QuoteBase):
     """Quote creation schema"""
+    villas: List[int] = []
     items: List[QuoteItemCreate] = []
+    
+    @field_validator('villas')
+    @classmethod
+    def validate_unique_villas(cls, v):
+        """Ensure villas are unique"""
+        if len(v) != len(set(v)):
+            raise ValueError('villas must be unique')
+        return v
 
 
 class QuoteUpdate(BaseModel):
@@ -96,12 +145,23 @@ class QuoteUpdate(BaseModel):
     customer_id: Optional[int] = None
     issue_date: Optional[date] = None
     expiry_date: Optional[date] = None
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
     status: Optional[QuoteStatus] = None
     total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
     tax_total: Optional[condecimal(max_digits=15, decimal_places=2)] = None
     notes: Optional[str] = None
     sales_person_id: Optional[int] = None
+    villas: Optional[List[int]] = None
     items: Optional[List[QuoteItemCreate]] = None
+    
+    @field_validator('villas')
+    @classmethod
+    def validate_unique_villas(cls, v):
+        """Ensure villas are unique"""
+        if v is not None and len(v) != len(set(v)):
+            raise ValueError('villas must be unique')
+        return v
 
     @validator('expiry_date')
     def validate_expiry_date(cls, v, values):
@@ -134,6 +194,7 @@ class Quote(QuoteInDB):
     """Quote schema for API responses"""
     customer: Optional[Customer] = None
     items: List[QuoteItem] = []
+    villas: List[QuoteVilla] = []
 
     class Config:
         """Pydantic config"""

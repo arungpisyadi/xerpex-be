@@ -151,6 +151,79 @@ def delete_villa(db: Session, villa_id: int) -> bool:
     return True
 
 
+def get_available_villas(
+    db: Session,
+    check_in: date,
+    check_out: date,
+    skip: int = 0,
+    limit: int = 100,
+    is_active: Optional[bool] = None,
+    location: Optional[str] = None,
+    name: Optional[str] = None
+) -> Tuple[List[Villa], int]:
+    """
+    Get available villas for a date range.
+    
+    Returns all villas except those with unavailable dates in the specified range.
+    
+    Args:
+        db: Database session
+        check_in: Check-in date
+        check_out: Check-out date
+        skip: Number of records to skip
+        limit: Maximum number of records to return
+        is_active: Filter by active status
+        location: Filter by location (case-insensitive partial match)
+        name: Filter by name (case-insensitive partial match)
+        
+    Returns:
+        Tuple[List[Villa], int]: (list of available villas, total count)
+    """
+    # Query for villa IDs that are unavailable in the date range
+    unavailable_villa_ids = (
+        db.query(VillaAvailability.villa_id)
+        .filter(
+            VillaAvailability.is_available == False,
+            VillaAvailability.date >= check_in,
+            VillaAvailability.date < check_out
+        )
+        .distinct()
+        .all()
+    )
+    
+    # Extract villa IDs from the result
+    unavailable_ids = [villa_id for (villa_id,) in unavailable_villa_ids]
+    
+    # Query for available villas
+    query = db.query(Villa)
+    
+    # Exclude unavailable villas
+    if unavailable_ids:
+        query = query.filter(Villa.id.notin_(unavailable_ids))
+    
+    # Apply optional filters
+    if is_active is not None:
+        query = query.filter(Villa.is_active == is_active)
+    if location:
+        # Search for location in both name and description since there's no location field
+        query = query.filter(
+            or_(
+                Villa.name.ilike(f"%{location}%"),
+                Villa.description.ilike(f"%{location}%")
+            )
+        )
+    if name:
+        query = query.filter(Villa.name.ilike(f"%{name}%"))
+    
+    # Get total count
+    total = query.count()
+    
+    # Apply pagination and execute
+    villas = query.offset(skip).limit(limit).all()
+    
+    return villas, total
+
+
 def get_villa_availability(
     db: Session, 
     villa_id: int, 

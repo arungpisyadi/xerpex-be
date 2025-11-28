@@ -54,6 +54,8 @@ class Invoice(Base):
     invoice_number = Column(String(50), unique=True, nullable=False, index=True)
     issue_date = Column(Date, nullable=False, default=date.today)
     due_date = Column(Date, nullable=False)
+    check_in = Column(Date, nullable=True)
+    check_out = Column(Date, nullable=True)
     status = Column(String(20), nullable=False, default="draft")
     payment_terms = Column(String(50), nullable=True)
     notes = Column(Text, nullable=True)
@@ -70,6 +72,7 @@ class Invoice(Base):
     customer = relationship("Customer", back_populates="invoices")
     quote = relationship("Quote", back_populates="invoices")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
+    villas = relationship("InvoiceVilla", back_populates="invoice", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
     history = relationship("InvoiceHistory", back_populates="invoice", cascade="all, delete-orphan")
     
@@ -138,3 +141,24 @@ class InvoiceHistory(Base):
         Index('idx_invoice_history_composite', 'invoice_id', 'created_at', 'event_category'),
         {"sqlite_autoincrement": True},  # For SQLite compatibility
     )
+
+
+class InvoiceVilla(Base):
+    """Invoice villa model - simple junction table for invoice-villa associations"""
+    __tablename__ = "invoice_villas"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
+    villa_id = Column(Integer, ForeignKey("villas.id", ondelete="CASCADE"), nullable=False)
+    
+    # Relationships
+    invoice = relationship("Invoice", back_populates="villas")
+    villa = relationship("Villa", back_populates="invoices")
+    
+    # Constraints
+    __table_args__ = (
+        {"sqlite_autoincrement": True},
+    )
+    
+    def __repr__(self):
+        return f"<InvoiceVilla(id={self.id}, invoice_id={self.invoice_id}, villa_id={self.villa_id})>"

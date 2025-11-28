@@ -12,12 +12,12 @@ from app.models.user import User
 from app.schemas.villa import (
     Villa, VillaCreate, VillaUpdate, VillaWithAvailability,
     VillaAvailability, VillaAvailabilityCreate, VillaAvailabilityUpdate,
-    AvailabilityCheck, AvailabilityResponse
+    AvailabilityCheck, AvailabilityResponse, VillaListResponse
 )
 from app.services.villa import (
     get_villa, get_villas, create_villa, update_villa, delete_villa,
     get_villa_availability, create_villa_availability, update_villa_availability,
-    check_villa_availability
+    check_villa_availability, get_available_villas
 )
 from app.utils.security import get_current_active_user
 
@@ -48,14 +48,75 @@ async def read_villas(
         List[Villa]: List of villas
     """
     villas = get_villas(
-        db, 
-        skip=skip, 
-        limit=limit, 
+        db,
+        skip=skip,
+        limit=limit,
         is_active=is_active,
         room_type=room_type,
         min_capacity=min_capacity
     )
     return villas
+
+
+@router.get("/available", response_model=VillaListResponse)
+async def get_available_villas_endpoint(
+    check_in: date = Query(..., description="Check-in date"),
+    check_out: date = Query(..., description="Check-out date"),
+    skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    location: Optional[str] = Query(None, description="Filter by location (partial match)"),
+    name: Optional[str] = Query(None, description="Filter by villa name (partial match)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get available villas for a date range.
+    
+    Returns all villas that are available (not blocked) for the entire period
+    between check_in and check_out dates. Villas with any unavailable dates
+    in this range will be excluded from the results.
+    
+    Args:
+        check_in: Start date of the availability check
+        check_out: End date of the availability check (must be after check_in)
+        skip: Number of records to skip for pagination
+        limit: Maximum number of records to return
+        is_active: Filter by active status
+        location: Filter by location (case-insensitive partial match)
+        name: Filter by villa name (case-insensitive partial match)
+        db: Database session
+    
+    Returns:
+        VillaListResponse containing list of available villas and pagination info
+        
+    Raises:
+        HTTPException: 400 if check_out is not after check_in
+    """
+    # Validate dates
+    if check_out <= check_in:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="check_out must be after check_in"
+        )
+    
+    # Get available villas
+    villas, total = get_available_villas(
+        db=db,
+        check_in=check_in,
+        check_out=check_out,
+        skip=skip,
+        limit=limit,
+        is_active=is_active,
+        location=location,
+        name=name
+    )
+    
+    return {
+        "villas": villas,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 
 @router.post("", response_model=Villa, status_code=status.HTTP_201_CREATED)

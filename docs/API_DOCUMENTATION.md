@@ -688,6 +688,494 @@ Response:
 }
 ```
 
+## Quote Management
+
+### Get All Quotes
+
+```
+GET /api/v1/quotes/
+```
+
+Query parameters:
+- `skip`: Number of records to skip (default: 0)
+- `limit`: Maximum number of records to return (default: 100)
+- `status`: Filter by quote status (optional)
+- `customer_id`: Filter by customer ID (optional)
+- `search`: Search by quote number or customer name (optional)
+
+Response:
+```json
+{
+  "quotes": [
+    {
+      "id": 1,
+      "quote_number": "QT-2025-001",
+      "customer_id": 1,
+      "customer": {
+        "id": 1,
+        "name": "John Doe",
+        "email": "john@example.com"
+      },
+      "issue_date": "2025-11-26",
+      "expiry_date": "2025-12-26",
+      "check_in": "2025-12-15",
+      "check_out": "2025-12-20",
+      "status": "sent",
+      "total": 2500.00,
+      "tax_total": 250.00,
+      "notes": "Holiday package quote",
+      "items": [
+        {
+          "id": 1,
+          "package_id": 1,
+          "unit_price": 500.00,
+          "discount": 0.00,
+          "pax": 2,
+          "line_total": 1000.00
+        }
+      ],
+      "villas": [
+        {
+          "id": 1,
+          "villa_id": 1,
+          "villa": {
+            "id": 1,
+            "name": "Luxury Villa",
+            "base_price": 1500.00
+          }
+        }
+      ],
+      "created_at": "2025-11-26T10:00:00",
+      "updated_at": "2025-11-26T10:00:00"
+    }
+  ],
+  "total": 1,
+  "skip": 0,
+  "limit": 100
+}
+```
+
+### Get Quote by ID
+
+```
+GET /api/v1/quotes/{quote_id}
+```
+
+Response:
+```json
+{
+  "id": 1,
+  "quote_number": "QT-2025-001",
+  "customer_id": 1,
+  "customer": {
+    "id": 1,
+    "name": "John Doe",
+    "email": "john@example.com"
+  },
+  "issue_date": "2025-11-26",
+  "expiry_date": "2025-12-26",
+  "check_in": "2025-12-15",
+  "check_out": "2025-12-20",
+  "status": "sent",
+  "total": 2500.00,
+  "tax_total": 250.00,
+  "notes": "Holiday package quote",
+  "created_at": "2025-11-26T10:00:00",
+  "updated_at": "2025-11-26T10:00:00"
+}
+```
+
+### Create Quote
+
+```
+POST /api/v1/quotes/
+```
+
+Request body:
+```json
+{
+  "customer_id": 1,
+  "issue_date": "2025-11-26",
+  "expiry_date": "2025-12-26",
+  "check_in": "2025-12-15",
+  "check_out": "2025-12-20",
+  "status": "draft",
+  "tax_total": 250.00,
+  "notes": "Holiday package quote",
+  "sales_person_id": 2,
+  "villas": [1],
+  "items": [
+    {
+      "package_id": 1,
+      "unit_price": 500.00,
+      "discount": 0.00,
+      "pax": 2,
+      "line_total": 1000.00
+    }
+  ]
+}
+```
+
+**Required Fields:**
+- `customer_id` (integer): ID of the customer
+- `issue_date` (date, YYYY-MM-DD): Date the quote is issued
+- `expiry_date` (date, YYYY-MM-DD): Date the quote expires
+- `items` (array): Array of quote items
+
+**Optional Fields:**
+- `check_in` (date, YYYY-MM-DD): Check-in date for the booking
+- `check_out` (date, YYYY-MM-DD): Check-out date for the booking
+- `status` (string): Quote status (default: "draft")
+- `tax_total` (decimal): Total tax amount (default: 0.00)
+- `notes` (string): Additional notes
+- `sales_person_id` (integer): ID of the assigned sales person
+- `villas` (array): Array of villa IDs
+
+Response:
+```json
+{
+  "id": 1,
+  "quote_number": "QT-2025-001",
+  "customer_id": 1,
+  "issue_date": "2025-11-26",
+  "expiry_date": "2025-12-26",
+  "check_in": "2025-12-15",
+  "check_out": "2025-12-20",
+  "status": "draft",
+  "total": 2500.00,
+  "tax_total": 250.00,
+  "notes": "Holiday package quote",
+  "sales_person_id": 2,
+  "created_at": "2025-11-26T10:00:00",
+  "updated_at": "2025-11-26T10:00:00"
+}
+```
+
+### Update Quote
+
+```
+PUT /api/v1/quotes/{quote_id}
+```
+
+Request body (all fields optional):
+```json
+{
+  "customer_id": 1,
+  "issue_date": "2025-11-26",
+  "expiry_date": "2025-12-26",
+  "check_in": "2025-12-15",
+  "check_out": "2025-12-20",
+  "status": "sent",
+  "tax_total": 250.00,
+  "notes": "Updated holiday package quote",
+  "sales_person_id": 2,
+  "villas": [1, 2],
+  "items": [
+    {
+      "package_id": 1,
+      "unit_price": 500.00,
+      "discount": 50.00,
+      "pax": 2,
+      "line_total": 950.00
+    }
+  ]
+}
+```
+
+Response:
+```json
+{
+  "id": 1,
+  "quote_number": "QT-2025-001",
+  "customer_id": 1,
+  "issue_date": "2025-11-26",
+  "expiry_date": "2025-12-26",
+  "check_in": "2025-12-15",
+  "check_out": "2025-12-20",
+  "status": "sent",
+  "total": 2450.00,
+  "tax_total": 250.00,
+  "notes": "Updated holiday package quote",
+  "created_at": "2025-11-26T10:00:00",
+  "updated_at": "2025-11-26T10:30:00"
+}
+```
+
+### Convert Quote to Invoice
+
+```
+POST /api/v1/quotes/{quote_id}/convert
+```
+
+Request body:
+```json
+{
+  "issue_date": "2025-11-27",
+  "due_date": "2025-12-27",
+  "notes": "Converted from quote QT-2025-001"
+}
+```
+
+Response:
+```json
+{
+  "message": "Quote converted to invoice successfully",
+  "invoice_id": 1,
+  "invoice_number": "INV-2025-001"
+}
+```
+
+## Invoice Management
+
+### Get All Invoices
+
+```
+GET /api/v1/invoices/
+```
+
+Query parameters:
+- `skip`: Number of records to skip (default: 0)
+- `limit`: Maximum number of records to return (default: 100)
+- `status`: Filter by invoice status (optional)
+- `customer_id`: Filter by customer ID (optional)
+- `search`: Search by invoice number or customer name (optional)
+
+Response:
+```json
+{
+  "invoices": [
+    {
+      "id": 1,
+      "invoice_number": "INV-2025-001",
+      "customer_id": 1,
+      "customer_name": "John Doe",
+      "customer_email": "john@example.com",
+      "billing_address": "123 Main St, City",
+      "quote_id": 1,
+      "issue_date": "2025-11-27",
+      "due_date": "2025-12-27",
+      "check_in": "2025-12-15",
+      "check_out": "2025-12-20",
+      "status": "sent",
+      "payment_terms": "Net 30",
+      "total": 2500.00,
+      "tax_total": 250.00,
+      "notes": "Converted from quote",
+      "items": [
+        {
+          "id": 1,
+          "package_id": 1,
+          "package_name": "Premium Package",
+          "unit_price": 500.00,
+          "discount": 0.00,
+          "pax": 2,
+          "line_total": 1000.00
+        }
+      ],
+      "villas": [
+        {
+          "id": 1,
+          "villa_id": 1,
+          "villa": {
+            "id": 1,
+            "name": "Luxury Villa",
+            "base_price": 1500.00
+          }
+        }
+      ],
+      "payments": [],
+      "created_at": "2025-11-27T09:00:00",
+      "updated_at": "2025-11-27T09:00:00"
+    }
+  ],
+  "total": 1,
+  "skip": 0,
+  "limit": 100
+}
+```
+
+### Get Invoice by ID
+
+```
+GET /api/v1/invoices/{invoice_id}
+```
+
+Response:
+```json
+{
+  "id": 1,
+  "invoice_number": "INV-2025-001",
+  "customer_id": 1,
+  "customer_name": "John Doe",
+  "customer_email": "john@example.com",
+  "billing_address": "123 Main St, City",
+  "quote_id": 1,
+  "issue_date": "2025-11-27",
+  "due_date": "2025-12-27",
+  "check_in": "2025-12-15",
+  "check_out": "2025-12-20",
+  "status": "sent",
+  "payment_terms": "Net 30",
+  "total": 2500.00,
+  "tax_total": 250.00,
+  "notes": "Converted from quote",
+  "created_at": "2025-11-27T09:00:00",
+  "updated_at": "2025-11-27T09:00:00"
+}
+```
+
+### Create Invoice
+
+```
+POST /api/v1/invoices/
+```
+
+Request body:
+```json
+{
+  "customer_id": 1,
+  "issue_date": "2025-11-27",
+  "due_date": "2025-12-27",
+  "check_in": "2025-12-15",
+  "check_out": "2025-12-20",
+  "status": "draft",
+  "payment_terms": "Net 30",
+  "tax_total": 250.00,
+  "notes": "New invoice",
+  "quote_id": null,
+  "villas": [1],
+  "items": [
+    {
+      "package_id": 1,
+      "unit_price": 500.00,
+      "discount": 0.00,
+      "pax": 2,
+      "line_total": 1000.00
+    }
+  ]
+}
+```
+
+**Required Fields:**
+- `customer_id` (integer): ID of the customer
+- `due_date` (date, YYYY-MM-DD): Payment due date
+- `items` (array): Array of invoice items (minimum 1 item)
+
+**Optional Fields:**
+- `issue_date` (date, YYYY-MM-DD): Invoice issue date (default: today)
+- `check_in` (date, YYYY-MM-DD): Check-in date for the booking
+- `check_out` (date, YYYY-MM-DD): Check-out date for the booking
+- `status` (string): Invoice status (default: "draft")
+- `payment_terms` (string): Payment terms (default: "Due on receipt")
+- `tax_total` (decimal): Total tax amount (default: 0.00)
+- `notes` (string): Additional notes
+- `quote_id` (integer): ID of the related quote if converted
+- `villas` (array): Array of villa IDs
+
+Response:
+```json
+{
+  "id": 2,
+  "invoice_number": "INV-2025-002",
+  "customer_id": 1,
+  "customer_name": "John Doe",
+  "customer_email": "john@example.com",
+  "billing_address": "123 Main St, City",
+  "quote_id": null,
+  "issue_date": "2025-11-27",
+  "due_date": "2025-12-27",
+  "check_in": "2025-12-15",
+  "check_out": "2025-12-20",
+  "status": "draft",
+  "payment_terms": "Net 30",
+  "total": 2500.00,
+  "tax_total": 250.00,
+  "notes": "New invoice",
+  "created_at": "2025-11-27T10:00:00",
+  "updated_at": "2025-11-27T10:00:00"
+}
+```
+
+### Update Invoice
+
+```
+PUT /api/v1/invoices/{invoice_id}
+```
+
+Request body (all fields optional):
+```json
+{
+  "customer_id": 1,
+  "issue_date": "2025-11-27",
+  "due_date": "2025-12-27",
+  "check_in": "2025-12-16",
+  "check_out": "2025-12-21",
+  "status": "sent",
+  "tax_total": 250.00,
+  "notes": "Updated invoice",
+  "villas": [1, 2],
+  "items": [
+    {
+      "package_id": 1,
+      "unit_price": 500.00,
+      "discount": 50.00,
+      "pax": 2,
+      "line_total": 950.00
+    }
+  ]
+}
+```
+
+Response:
+```json
+{
+  "id": 2,
+  "invoice_number": "INV-2025-002",
+  "customer_id": 1,
+  "issue_date": "2025-11-27",
+  "due_date": "2025-12-27",
+  "check_in": "2025-12-16",
+  "check_out": "2025-12-21",
+  "status": "sent",
+  "total": 2450.00,
+  "tax_total": 250.00,
+  "notes": "Updated invoice",
+  "created_at": "2025-11-27T10:00:00",
+  "updated_at": "2025-11-27T10:30:00"
+}
+```
+
+### Update Invoice Status
+
+```
+PATCH /api/v1/invoices/{invoice_id}/status
+```
+
+Request body:
+```json
+{
+  "status": "sent"
+}
+```
+
+**Invoice Status Options:**
+- `draft`: Invoice is in draft state
+- `sent`: Invoice has been sent to customer
+- `partially_paid`: Invoice has been partially paid
+- `paid`: Invoice has been fully paid
+- `overdue`: Invoice is past due date
+- `cancelled`: Invoice has been cancelled
+
+Response:
+```json
+{
+  "id": 2,
+  "invoice_number": "INV-2025-002",
+  "status": "sent",
+  "updated_at": "2025-11-27T11:00:00"
+}
+```
+
 ## Reporting
 
 ### Occupancy Report
