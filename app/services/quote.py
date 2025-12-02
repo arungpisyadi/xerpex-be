@@ -239,10 +239,10 @@ def create_quote(db: Session, quote: QuoteCreate, current_user: User) -> Quote:
 
 
 def update_quote(
-    db: Session, 
-    quote_id: int, 
-    quote_update: QuoteUpdate, 
-    user_id: int
+    db: Session,
+    quote_id: int,
+    quote_update: QuoteUpdate,
+    current_user: User
 ) -> Quote:
     """
     Update a quote
@@ -251,7 +251,7 @@ def update_quote(
         db: Database session
         quote_id: Quote ID
         quote_update: Quote update data
-        user_id: Current user ID for isolation
+        current_user: Current user (for role-based access control)
         
     Returns:
         Quote: Updated quote
@@ -259,10 +259,7 @@ def update_quote(
     Raises:
         HTTPException: If quote not found or validation fails
     """
-    # Create a temporary user object for the internal call
-    from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-    db_quote = get_quote(db, quote_id, temp_user)
+    db_quote = get_quote(db, quote_id, current_user)
     if not db_quote:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -281,10 +278,7 @@ def update_quote(
     
     # Validate customer if being updated
     if 'customer_id' in update_data:
-        # Create a temporary user object for the internal call
-        from app.models.user import User
-        temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-        customer = get_customer(db, update_data['customer_id'], temp_user)
+        customer = get_customer(db, update_data['customer_id'], current_user)
         if not customer:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -321,7 +315,12 @@ def update_quote(
         for item_data in quote_update.items:
             # Validate package
             package = get_package(db, item_data.package_id)
-            if not package or package.user_id != user_id:
+            if not package:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Package with ID {item_data.package_id} not found"
+                )
+            if should_apply_user_isolation(current_user) and package.user_id != current_user.id:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Package with ID {item_data.package_id} not found"
@@ -441,10 +440,10 @@ def update_quote_notes(
 
 
 def update_quote_status(
-    db: Session, 
-    quote_id: int, 
-    status_update: QuoteStatusUpdate, 
-    user_id: int
+    db: Session,
+    quote_id: int,
+    status_update: QuoteStatusUpdate,
+    current_user: User
 ) -> Quote:
     """
     Update quote status with workflow validation
@@ -453,7 +452,7 @@ def update_quote_status(
         db: Database session
         quote_id: Quote ID
         status_update: Status update data
-        user_id: Current user ID for isolation
+        current_user: Current user (for role-based access control)
         
     Returns:
         Quote: Updated quote
@@ -461,10 +460,7 @@ def update_quote_status(
     Raises:
         HTTPException: If quote not found or invalid status transition
     """
-    # Create a temporary user object for the internal call
-    from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-    db_quote = get_quote(db, quote_id, temp_user)
+    db_quote = get_quote(db, quote_id, current_user)
     if not db_quote:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -502,14 +498,14 @@ def update_quote_status(
     return db_quote
 
 
-def delete_quote(db: Session, quote_id: int, user_id: int) -> bool:
+def delete_quote(db: Session, quote_id: int, current_user: User) -> bool:
     """
     Delete a quote
     
     Args:
         db: Database session
         quote_id: Quote ID
-        user_id: Current user ID for isolation
+        current_user: Current user (for role-based access control)
         
     Returns:
         bool: True if quote was deleted
@@ -517,10 +513,7 @@ def delete_quote(db: Session, quote_id: int, user_id: int) -> bool:
     Raises:
         HTTPException: If quote not found or cannot be deleted
     """
-    # Create a temporary user object for the internal call
-    from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-    db_quote = get_quote(db, quote_id, temp_user)
+    db_quote = get_quote(db, quote_id, current_user)
     if not db_quote:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

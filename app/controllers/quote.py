@@ -191,7 +191,7 @@ async def update_quote_endpoint(
             db=db,
             quote_id=quote_id,
             quote_update=quote_update,
-            user_id=current_user.id
+            current_user=current_user
         )
         return updated_quote
     except ValueError as e:
@@ -216,7 +216,7 @@ async def update_quote_status_endpoint(
             db=db,
             quote_id=quote_id,
             status_update=status_update,
-            user_id=current_user.id
+            current_user=current_user
         )
         return updated_quote
     except ValueError as e:
@@ -263,7 +263,7 @@ async def delete_quote_endpoint(
     success = delete_quote(
         db=db,
         quote_id=quote_id,
-        user_id=current_user.id
+        current_user=current_user
     )
     if not success:
         raise HTTPException(
@@ -288,7 +288,7 @@ async def send_quote(
             db=db,
             quote_id=quote_id,
             status_update=status_update,
-            user_id=current_user.id
+            current_user=current_user
         )
         return updated_quote
     except ValueError as e:
@@ -313,7 +313,7 @@ async def accept_quote(
             db=db,
             quote_id=quote_id,
             status_update=status_update,
-            user_id=current_user.id
+            current_user=current_user
         )
         return updated_quote
     except ValueError as e:
@@ -338,7 +338,7 @@ async def decline_quote(
             db=db,
             quote_id=quote_id,
             status_update=status_update,
-            user_id=current_user.id
+            current_user=current_user
         )
         return updated_quote
     except ValueError as e:
@@ -363,7 +363,7 @@ async def reopen_quote(
             db=db,
             quote_id=quote_id,
             status_update=status_update,
-            user_id=current_user.id
+            current_user=current_user
         )
         return updated_quote
     except ValueError as e:
