@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func
 
-from app.models.payment import Invoice, InvoiceItem, Payment, InvoiceHistory, InvoiceVilla
+from app.models.payment import Invoice, InvoiceItem, Payment, InvoiceHistory, InvoiceVilla, PaymentHistory
 from app.models.customer import Customer
 from app.models.package import Package
 from app.models.quote import Quote, QuoteItem, QuoteVilla
@@ -44,7 +44,17 @@ def get_invoice(db: Session, invoice_id: int, current_user: User) -> Optional[In
         joinedload(Invoice.customer),
         joinedload(Invoice.items).joinedload(InvoiceItem.package),
         joinedload(Invoice.villas).joinedload(InvoiceVilla.villa),
-        joinedload(Invoice.payments)
+        joinedload(Invoice.payments),
+        joinedload(Invoice.history).load_only(
+            InvoiceHistory.id,
+            InvoiceHistory.invoice_id,
+            InvoiceHistory.user_id,
+            InvoiceHistory.event_type,
+            InvoiceHistory.event_category,
+            InvoiceHistory.description,
+            InvoiceHistory.event_metadata,
+            InvoiceHistory.created_at
+        )
     ).filter(Invoice.id == invoice_id)
     
     # Apply user isolation based on role
@@ -654,7 +664,17 @@ def get_payment(db: Session, payment_id: int, current_user: User) -> Optional[Pa
         Payment: Payment or None
     """
     query = db.query(Payment).options(
-        joinedload(Payment.invoice).joinedload(Invoice.customer)
+        joinedload(Payment.invoice).joinedload(Invoice.customer),
+        joinedload(Payment.history).load_only(
+            PaymentHistory.id,
+            PaymentHistory.payment_id,
+            PaymentHistory.user_id,
+            PaymentHistory.event_type,
+            PaymentHistory.event_category,
+            PaymentHistory.description,
+            PaymentHistory.event_metadata,
+            PaymentHistory.created_at
+        )
     ).filter(Payment.id == payment_id)
     
     # Apply user isolation based on role
@@ -808,6 +828,23 @@ def create_payment(db: Session, payment: PaymentCreate, created_by: int) -> Paym
         payment_id=db_payment.id
     )
     
+    # Log payment history event
+    safe_log_payment_history(
+        db=db,
+        payment_id=db_payment.id,
+        user_id=created_by,
+        event_type="payment_created",
+        event_category="lifecycle",
+        description=f"Payment created for ${payment.amount}",
+        metadata={
+            "amount": str(payment.amount),
+            "payment_method": payment.payment_method.value if isinstance(payment.payment_method, PaymentMethod) else payment.payment_method,
+            "payment_type": payment.payment_type.value if hasattr(payment, 'payment_type') and payment.payment_type else None,
+            "invoice_id": payment.invoice_id,
+            "status": db_payment.status
+        }
+    )
+    
     return db_payment
 
 
@@ -852,12 +889,29 @@ def update_payment(
     # Update payment fields
     update_data = payment_update.dict(exclude_unset=True)
     
+    # Track changes for history
+    changed_fields = {}
     for key, value in update_data.items():
+        old_value = getattr(db_payment, key)
+        if old_value != value:
+            changed_fields[key] = {"old": str(old_value) if old_value is not None else None, "new": str(value) if value is not None else None}
         setattr(db_payment, key, value)
     
     db_payment.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_payment)
+    
+    # Log payment history event
+    if changed_fields:
+        safe_log_payment_history(
+            db=db,
+            payment_id=db_payment.id,
+            user_id=created_by,
+            event_type="payment_updated",
+            event_category="data",
+            description="Payment updated",
+            metadata={"changed_fields": changed_fields}
+        )
     
     return db_payment
 
@@ -927,6 +981,21 @@ def update_payment_status(
         payment_id=db_payment.id
     )
     
+    # Log payment history event for status change
+    safe_log_payment_history(
+        db=db,
+        payment_id=db_payment.id,
+        user_id=created_by,
+        event_type="status_changed",
+        event_category="status",
+        description=f"Payment status changed from '{old_status}' to '{status_update.status}'",
+        metadata={
+            "old_status": old_status.value if hasattr(old_status, 'value') else str(old_status),
+            "new_status": status_update.status.value if hasattr(status_update.status, 'value') else str(status_update.status),
+            "amount": str(db_payment.amount)
+        }
+    )
+    
     # Update invoice payment status (handles partial/full payment)
     _update_invoice_payment_status(db, db_payment.invoice)
     
@@ -964,6 +1033,22 @@ def delete_payment(db: Session, payment_id: int, created_by: int) -> bool:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only pending payments can be deleted"
         )
+    
+    # Log payment history event before deletion
+    safe_log_payment_history(
+        db=db,
+        payment_id=db_payment.id,
+        user_id=created_by,
+        event_type="payment_deleted",
+        event_category="lifecycle",
+        description=f"Payment of ${db_payment.amount} deleted",
+        metadata={
+            "amount": str(db_payment.amount),
+            "payment_method": db_payment.payment_method,
+            "invoice_id": db_payment.invoice_id,
+            "status": db_payment.status
+        }
+    )
     
     invoice = db_payment.invoice
     db.delete(db_payment)
@@ -1330,6 +1415,56 @@ def safe_log_invoice_history(
     except Exception as e:
         # Log error but don't break main operation
         print(f"Failed to safely log invoice history: {e}")
+
+
+# Payment History Services
+def log_payment_history(
+    db: Session,
+    payment_id: int,
+    user_id: Optional[int],
+    event_type: str,
+    event_category: str,
+    description: str,
+    metadata: Optional[Dict[str, Any]] = None
+) -> Optional[PaymentHistory]:
+    """Log a payment history event."""
+    history_entry = PaymentHistory(
+        payment_id=payment_id,
+        user_id=user_id,
+        event_type=event_type,
+        event_category=event_category,
+        description=description,
+        event_metadata=metadata
+    )
+    db.add(history_entry)
+    db.commit()
+    return history_entry
+
+
+def safe_log_payment_history(
+    db: Session,
+    payment_id: int,
+    user_id: Optional[int],
+    event_type: str,
+    event_category: str,
+    description: str,
+    metadata: Optional[Dict[str, Any]] = None
+) -> Optional['PaymentHistory']:
+    """Safely log payment history without affecting main operations."""
+    try:
+        return log_payment_history(
+            db=db,
+            payment_id=payment_id,
+            user_id=user_id,
+            event_type=event_type,
+            event_category=event_category,
+            description=description,
+            metadata=metadata
+        )
+    except Exception as e:
+        print(f"Failed to log payment history: {e}")
+        db.rollback()
+        return None
 
 
 def get_invoice_history(

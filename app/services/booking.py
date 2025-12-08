@@ -54,7 +54,18 @@ def get_booking(db: Session, booking_id: int, current_user: User) -> Optional[Bo
         query = db.query(Booking).options(
             joinedload(Booking.customer),
             joinedload(Booking.items).joinedload(BookingItem.package),
-            joinedload(Booking.villas).joinedload(BookingVilla.villa)
+            joinedload(Booking.villas).joinedload(BookingVilla.villa),
+            joinedload(Booking.history).load_only(
+                BookingHistory.id,
+                BookingHistory.booking_id,
+                BookingHistory.user_id,
+                BookingHistory.field_name,
+                BookingHistory.old_value,
+                BookingHistory.new_value,
+                BookingHistory.change_type,
+                BookingHistory.payment_id,
+                BookingHistory.created_at
+            )
         ).filter(Booking.id == booking_id)
         
         # Apply user isolation based on role
@@ -318,7 +329,7 @@ def create_booking(db: Session, booking: BookingCreate, current_user: User) -> B
         db_booking.amount_due = db_booking.total
         
         # Create initial history record
-        create_booking_history(
+        safe_log_booking_history(
             db, db_booking.id, current_user.id,
             field_name='status',
             old_value=None,
@@ -427,7 +438,7 @@ def update_booking(
         for key, value in update_data.items():
             old_value = getattr(db_booking, key)
             if old_value != value:
-                create_booking_history(
+                safe_log_booking_history(
                     db, booking_id, current_user.id,
                     field_name=key,
                     old_value=str(old_value) if old_value is not None else None,
@@ -539,7 +550,7 @@ def update_booking_status(
             )
         
         # Create history record
-        create_booking_history(
+        safe_log_booking_history(
             db, booking_id, current_user.id,
             field_name='status',
             old_value=db_booking.status,
@@ -610,6 +621,17 @@ def delete_booking(db: Session, booking_id: int, current_user: User) -> bool:
                 db_booking.booking_code, current_user.id, 
                 is_available=True
             )
+        
+        # Log history event before deletion
+        safe_log_booking_history(
+            db=db,
+            booking_id=db_booking.id,
+            user_id=current_user.id,
+            change_type="deleted",
+            field_name="status",
+            old_value=db_booking.status,
+            new_value=None
+        )
         
         db.delete(db_booking)
         db.commit()
@@ -697,7 +719,7 @@ def add_booking_item(
         db.add(booking_item)
         
         # Create history record
-        create_booking_history(
+        safe_log_booking_history(
             db, booking_id, current_user.id,
             field_name='items',
             old_value=None,
@@ -797,7 +819,7 @@ def update_booking_item(
             setattr(booking_item, key, value)
         
         # Create history record
-        create_booking_history(
+        safe_log_booking_history(
             db, booking_id, current_user.id,
             field_name='items',
             old_value=None,
@@ -874,7 +896,7 @@ def remove_booking_item(
             )
         
         # Create history record
-        create_booking_history(
+        safe_log_booking_history(
             db, booking_id, current_user.id,
             field_name='items',
             old_value=f"Item {item_id}",
@@ -977,7 +999,7 @@ def add_booking_villa(
         )
         
         # Create history record
-        create_booking_history(
+        safe_log_booking_history(
             db, booking_id, current_user.id,
             field_name='villas',
             old_value=None,
@@ -1120,7 +1142,7 @@ def remove_booking_villa(
         
         # Create history record
         villa_obj = get_villa(db, villa_id)
-        create_booking_history(
+        safe_log_booking_history(
             db, booking_id, current_user.id,
             field_name='villas',
             old_value=f"Villa: {villa_obj.name if villa_obj else villa_id}",
@@ -1271,6 +1293,59 @@ def create_booking_history(
     )
     
     db.add(history)
+
+
+def log_booking_history(
+    db: Session,
+    booking_id: int,
+    user_id: Optional[int],
+    change_type: str,
+    field_name: Optional[str] = None,
+    old_value: Optional[str] = None,
+    new_value: Optional[str] = None,
+    payment_id: Optional[int] = None
+) -> BookingHistory:
+    """Log a booking history event."""
+    history_entry = BookingHistory(
+        booking_id=booking_id,
+        user_id=user_id,
+        change_type=change_type,
+        field_name=field_name,
+        old_value=old_value,
+        new_value=new_value,
+        payment_id=payment_id
+    )
+    db.add(history_entry)
+    db.commit()
+    return history_entry
+
+
+def safe_log_booking_history(
+    db: Session,
+    booking_id: int,
+    user_id: Optional[int],
+    change_type: str,
+    field_name: Optional[str] = None,
+    old_value: Optional[str] = None,
+    new_value: Optional[str] = None,
+    payment_id: Optional[int] = None
+) -> Optional[BookingHistory]:
+    """Safely log booking history without affecting main operations."""
+    try:
+        return log_booking_history(
+            db=db,
+            booking_id=booking_id,
+            user_id=user_id,
+            change_type=change_type,
+            field_name=field_name,
+            old_value=old_value,
+            new_value=new_value,
+            payment_id=payment_id
+        )
+    except Exception as e:
+        print(f"Failed to log booking history: {e}")
+        db.rollback()
+        return None
     return history
 
 

@@ -2,7 +2,7 @@
 Quote models for the XerpeX ERP System
 """
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, Text, Date, DateTime, Numeric, ForeignKey, CheckConstraint
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, Numeric, ForeignKey, CheckConstraint, JSON, Index, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -35,6 +35,7 @@ class Quote(Base):
     items = relationship("QuoteItem", back_populates="quote", cascade="all, delete-orphan")
     villas = relationship("QuoteVilla", back_populates="quote", cascade="all, delete-orphan")
     invoices = relationship("Invoice", back_populates="quote")
+    history = relationship("QuoteHistory", back_populates="quote", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (
@@ -88,3 +89,33 @@ class QuoteVilla(Base):
     
     def __repr__(self):
         return f"<QuoteVilla(id={self.id}, quote_id={self.quote_id}, villa_id={self.villa_id})>"
+
+
+class QuoteHistory(Base):
+    """Quote history model for tracking quote lifecycle events"""
+    __tablename__ = "quote_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    quote_id = Column(Integer, ForeignKey("quotes.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    event_type = Column(String(50), nullable=False)
+    event_category = Column(String(50), nullable=False)
+    description = Column(Text, nullable=False)
+    event_metadata = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Relationships
+    quote = relationship("Quote", back_populates="history")
+    user = relationship("User", back_populates="quote_history")
+    
+    # Constraints and Indexes
+    __table_args__ = (
+        CheckConstraint(
+            "event_category IN ('lifecycle', 'status', 'workflow', 'data')",
+            name="check_quote_history_event_category"
+        ),
+        Index('idx_quote_history_quote_id', 'quote_id'),
+        Index('idx_quote_history_user_id', 'user_id'),
+        Index('idx_quote_history_created_at', 'created_at'),
+        {"sqlite_autoincrement": True},  # For SQLite compatibility
+    )

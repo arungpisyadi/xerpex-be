@@ -2,7 +2,7 @@
 Quote schemas for the XerpeX ERP System
 """
 from datetime import datetime, date
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, condecimal, validator, field_validator, Field, AliasChoices
 from app.schemas.customer import Customer
@@ -103,6 +103,25 @@ class QuoteVilla(QuoteVillaInDB):
 
 
 # ============================================================================
+# Quote History Schemas
+# ============================================================================
+
+class QuoteHistoryResponse(BaseModel):
+    """Quote history event response schema"""
+    id: int
+    quote_id: int
+    user_id: Optional[int]
+    event_type: str
+    event_category: str
+    description: str
+    event_metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ============================================================================
 # Main Quote Schemas
 # ============================================================================
 
@@ -195,6 +214,7 @@ class Quote(QuoteInDB):
     customer: Optional[Customer] = None
     items: List[QuoteItem] = []
     villas: List[QuoteVilla] = []
+    history: Optional[List[QuoteHistoryResponse]] = []
 
     class Config:
         """Pydantic config"""

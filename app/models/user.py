@@ -40,7 +40,11 @@ class User(Base):
     packages = relationship("Package", back_populates="user", cascade="all, delete-orphan")
     targets = relationship("Target", back_populates="user", cascade="all, delete-orphan")
     target_achievements = relationship("TargetAchievement", back_populates="user", cascade="all, delete-orphan")
+    
+    # History relationships
     invoice_history = relationship("InvoiceHistory", back_populates="user", cascade="all, delete-orphan")
+    quote_history = relationship("QuoteHistory", back_populates="user", cascade="all, delete-orphan")
+    payment_history = relationship("PaymentHistory", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserActivity(Base):

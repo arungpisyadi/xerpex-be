@@ -3,7 +3,7 @@ Payment and Invoice schemas for the XerpeX ERP System
 """
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from enum import Enum
 
 from pydantic import BaseModel, Field, validator, field_validator, root_validator
@@ -83,6 +83,22 @@ class InvoiceHistoryListResponse(BaseModel):
     skip: int
     limit: int
 
+    class Config:
+        from_attributes = True
+
+
+# Payment History Schemas
+class PaymentHistoryResponse(BaseModel):
+    """Payment history event response schema"""
+    id: int
+    payment_id: int
+    user_id: Optional[int]
+    event_type: str
+    event_category: str
+    description: str
+    event_metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    
     class Config:
         from_attributes = True
 
@@ -265,6 +281,7 @@ class InvoiceResponse(InvoiceBase):
     items: List[InvoiceItemResponse] = []
     villas: List[InvoiceVilla] = []
     payments: List['PaymentResponse'] = []
+    history: Optional[List[InvoiceHistoryResponse]] = []
     created_at: datetime
     updated_at: datetime
 
@@ -340,6 +357,7 @@ class PaymentResponse(PaymentBase):
     status: PaymentStatus = Field(..., description="Current status of the payment")
     invoice_number: Optional[str] = None
     customer_name: Optional[str] = None
+    history: Optional[List[PaymentHistoryResponse]] = []
     created_at: datetime
     updated_at: datetime
 

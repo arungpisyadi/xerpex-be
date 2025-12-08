@@ -4,7 +4,7 @@ Booking schemas for the XerpeX ERP System
 from __future__ import annotations
 
 from datetime import datetime, date
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Any
 from decimal import Decimal
 from enum import Enum
 from pydantic import BaseModel, EmailStr, condecimal, Field, field_validator
@@ -134,6 +134,23 @@ class BookingHistory(BookingHistoryBase):
     user_id: int
     created_at: datetime
 
+    class Config:
+        """Pydantic config"""
+        from_attributes = True
+
+
+class BookingHistoryResponse(BaseModel):
+    """Booking history response schema for API"""
+    id: int
+    booking_id: int
+    user_id: Optional[int]
+    field_name: Optional[str] = None
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    change_type: str
+    payment_id: Optional[int] = None
+    created_at: datetime
+    
     class Config:
         """Pydantic config"""
         from_attributes = True
@@ -270,6 +287,7 @@ class Booking(BookingInDB):
     sales_person: Optional[UserResponse] = None  # Sales person who handled this booking
     items: List[BookingItem] = []
     villas: List[BookingVilla] = []
+    history: Optional[List[BookingHistoryResponse]] = []
 
     class Config:
         """Pydantic config"""

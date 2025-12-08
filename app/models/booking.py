@@ -127,6 +127,7 @@ class BookingHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    payment_id = Column(Integer, ForeignKey("payments.id", ondelete="SET NULL"), nullable=True, index=True)
     field_name = Column(String(100), nullable=False)
     old_value = Column(Text, nullable=True)
     new_value = Column(Text, nullable=True)
@@ -136,6 +137,7 @@ class BookingHistory(Base):
     # Relationships
     booking = relationship("Booking", back_populates="history")
     user = relationship("User")
+    payment = relationship("Payment", back_populates="booking_history")
     
     # Constraints
     __table_args__ = (

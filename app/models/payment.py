@@ -2,7 +2,7 @@
 Payment models for the XerpeX ERP System
 """
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, DateTime, Date, Text, Numeric, ForeignKey, CheckConstraint, JSON, Index
+from sqlalchemy import Column, Integer, String, DateTime, Date, Text, Numeric, ForeignKey, CheckConstraint, JSON, Index, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -30,7 +30,9 @@ class Payment(Base):
     booking = relationship("Booking", back_populates="payments")
     invoice = relationship("Invoice", back_populates="payments")
     creator = relationship("User", back_populates="created_payments")
-    history = relationship("InvoiceHistory", back_populates="payment")
+    invoice_history = relationship("InvoiceHistory", back_populates="payment")
+    history = relationship("PaymentHistory", back_populates="payment", cascade="all, delete-orphan")
+    booking_history = relationship("BookingHistory", back_populates="payment")
     
     # Indexes
     __table_args__ = (
@@ -162,3 +164,33 @@ class InvoiceVilla(Base):
     
     def __repr__(self):
         return f"<InvoiceVilla(id={self.id}, invoice_id={self.invoice_id}, villa_id={self.villa_id})>"
+
+
+class PaymentHistory(Base):
+    """Payment history model for tracking payment lifecycle events"""
+    __tablename__ = "payment_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    payment_id = Column(Integer, ForeignKey("payments.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    event_type = Column(String(50), nullable=False)
+    event_category = Column(String(50), nullable=False)
+    description = Column(Text, nullable=False)
+    event_metadata = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Relationships
+    payment = relationship("Payment", back_populates="history")
+    user = relationship("User", back_populates="payment_history")
+    
+    # Constraints and Indexes
+    __table_args__ = (
+        CheckConstraint(
+            "event_category IN ('lifecycle', 'status', 'workflow', 'data')",
+            name="check_payment_history_event_category"
+        ),
+        Index('idx_payment_history_payment_id', 'payment_id'),
+        Index('idx_payment_history_user_id', 'user_id'),
+        Index('idx_payment_history_created_at', 'created_at'),
+        {"sqlite_autoincrement": True},  # For SQLite compatibility
+    )

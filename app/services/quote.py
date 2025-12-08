@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, func
 
-from app.models.quote import Quote, QuoteItem, QuoteVilla
+from app.models.quote import Quote, QuoteItem, QuoteVilla, QuoteHistory
 from app.models.customer import Customer
 from app.models.package import Package
 from app.models.tax import Tax
@@ -42,7 +42,17 @@ def get_quote(db: Session, quote_id: int, current_user: User) -> Optional[Quote]
     query = db.query(Quote).options(
         joinedload(Quote.customer),
         joinedload(Quote.items).joinedload(QuoteItem.package),
-        joinedload(Quote.villas).joinedload(QuoteVilla.villa)
+        joinedload(Quote.villas).joinedload(QuoteVilla.villa),
+        joinedload(Quote.history).load_only(
+            QuoteHistory.id,
+            QuoteHistory.quote_id,
+            QuoteHistory.user_id,
+            QuoteHistory.event_type,
+            QuoteHistory.event_category,
+            QuoteHistory.description,
+            QuoteHistory.event_metadata,
+            QuoteHistory.created_at
+        )
     ).filter(Quote.id == quote_id)
     
     # Apply user isolation based on role
@@ -235,6 +245,22 @@ def create_quote(db: Session, quote: QuoteCreate, current_user: User) -> Quote:
     db.commit()
     db.refresh(db_quote)
     
+    # Log history event
+    safe_log_quote_history(
+        db=db,
+        quote_id=db_quote.id,
+        user_id=current_user.id,
+        event_type="quote_created",
+        event_category="lifecycle",
+        description="Quote created",
+        metadata={
+            "quote_number": db_quote.quote_number,
+            "customer_name": customer.name,
+            "total_amount": str(db_quote.total),
+            "status": db_quote.status
+        }
+    )
+    
     return db_quote
 
 
@@ -390,6 +416,27 @@ def update_quote(
     db.commit()
     db.refresh(db_quote)
     
+    # Log history event for update
+    changed_fields = {}
+    for key in update_data.keys():
+        if key not in ['items', 'villas']:
+            changed_fields[key] = str(update_data[key])
+    
+    safe_log_quote_history(
+        db=db,
+        quote_id=db_quote.id,
+        user_id=current_user.id,
+        event_type="quote_updated",
+        event_category="data",
+        description="Quote updated",
+        metadata={
+            "changed_fields": changed_fields,
+            "items_updated": quote_update.items is not None,
+            "villas_updated": quote_update.villas is not None,
+            "new_total": str(db_quote.total)
+        }
+    )
+    
     return db_quote
 
 
@@ -489,11 +536,26 @@ def update_quote_status(
             detail="Cannot mark quote as expired before expiry date"
         )
     
+    old_status = db_quote.status
     db_quote.status = status_update.status
     db_quote.updated_at = datetime.utcnow()
     
     db.commit()
     db.refresh(db_quote)
+    
+    # Log history event for status change
+    safe_log_quote_history(
+        db=db,
+        quote_id=db_quote.id,
+        user_id=current_user.id,
+        event_type="status_changed",
+        event_category="status",
+        description=f"Quote status changed from '{old_status}' to '{status_update.status}'",
+        metadata={
+            "old_status": old_status,
+            "new_status": status_update.status
+        }
+    )
     
     return db_quote
 
@@ -533,6 +595,20 @@ def delete_quote(db: Session, quote_id: int, current_user: User) -> bool:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete quote that has been converted to invoice"
         )
+    
+    # Log history event before deletion
+    safe_log_quote_history(
+        db=db,
+        quote_id=db_quote.id,
+        user_id=current_user.id,
+        event_type="quote_deleted",
+        event_category="lifecycle",
+        description="Quote deleted",
+        metadata={
+            "quote_number": db_quote.quote_number,
+            "status": db_quote.status
+        }
+    )
     
     db.delete(db_quote)
     db.commit()
@@ -638,4 +714,56 @@ def check_expired_quotes(db: Session) -> List[Quote]:
     if expired_quotes:
         db.commit()
     
+
+
+# Quote History Services
+def log_quote_history(
+    db: Session,
+    quote_id: int,
+    user_id: Optional[int],
+    event_type: str,
+    event_category: str,
+    description: str,
+    metadata: Optional[Dict[str, Any]] = None
+) -> Optional['QuoteHistory']:
+    """Log a quote history event."""
+    from app.models.quote import QuoteHistory
+    
+    history_entry = QuoteHistory(
+        quote_id=quote_id,
+        user_id=user_id,
+        event_type=event_type,
+        event_category=event_category,
+        description=description,
+        event_metadata=metadata
+    )
+    db.add(history_entry)
+    db.commit()
+    return history_entry
+
+
+def safe_log_quote_history(
+    db: Session,
+    quote_id: int,
+    user_id: Optional[int],
+    event_type: str,
+    event_category: str,
+    description: str,
+    metadata: Optional[Dict[str, Any]] = None
+) -> Optional['QuoteHistory']:
+    """Safely log quote history without affecting main operations."""
+    try:
+        return log_quote_history(
+            db=db,
+            quote_id=quote_id,
+            user_id=user_id,
+            event_type=event_type,
+            event_category=event_category,
+            description=description,
+            metadata=metadata
+        )
+    except Exception as e:
+        print(f"Failed to log quote history: {e}")
+        db.rollback()
+        return None
     return expired_quotes
