@@ -31,7 +31,7 @@ class Payment(Base):
     invoice = relationship("Invoice", back_populates="payments")
     creator = relationship("User", back_populates="created_payments")
     invoice_history = relationship("InvoiceHistory", back_populates="payment")
-    history = relationship("PaymentHistory", back_populates="payment", cascade="all, delete-orphan")
+    payment_history = relationship("PaymentHistory", back_populates="payment", cascade="all, delete-orphan")
     booking_history = relationship("BookingHistory", back_populates="payment")
     
     # Indexes
@@ -128,7 +128,7 @@ class InvoiceHistory(Base):
     # Relationships
     invoice = relationship("Invoice", back_populates="history")
     user = relationship("User", back_populates="invoice_history")
-    payment = relationship("Payment", back_populates="history")
+    payment = relationship("Payment", back_populates="invoice_history")
     
     # Constraints and Indexes
     __table_args__ = (
@@ -180,7 +180,7 @@ class PaymentHistory(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     
     # Relationships
-    payment = relationship("Payment", back_populates="history")
+    payment = relationship("Payment", back_populates="payment_history")
     user = relationship("User", back_populates="payment_history")
     
     # Constraints and Indexes
