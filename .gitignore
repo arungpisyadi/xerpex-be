@@ -16,6 +16,7 @@ test.db
 venv/*/*/*
 venv/*/*
 venv/*
+venv/
 venv
 *.pyc
 *.pyo
