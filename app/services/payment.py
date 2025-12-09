@@ -303,11 +303,16 @@ def update_invoice(
     Raises:
         HTTPException: If invoice not found or validation fails
     """
-    # Create a temporary user object for the internal call
-    # This is a workaround until we fully update all functions to use User objects
+    # Get actual user from database to preserve role information
     from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-    db_invoice = get_invoice(db, invoice_id, temp_user)
+    actual_user = db.query(User).filter(User.id == user_id).first()
+    if not actual_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db_invoice = get_invoice(db, invoice_id, actual_user)
     if not db_invoice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -326,7 +331,7 @@ def update_invoice(
     
     # Validate customer if being updated
     if 'customer_id' in update_data:
-        customer = get_customer(db, update_data['customer_id'], temp_user)
+        customer = get_customer(db, update_data['customer_id'], actual_user)
         if not customer:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -451,10 +456,16 @@ def update_invoice_status(
     Raises:
         HTTPException: If invoice not found
     """
-    # Create a temporary user object for the internal call
+    # Get actual user from database to preserve role information
     from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-    db_invoice = get_invoice(db, invoice_id, temp_user)
+    actual_user = db.query(User).filter(User.id == user_id).first()
+    if not actual_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db_invoice = get_invoice(db, invoice_id, actual_user)
     if not db_invoice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -561,10 +572,16 @@ def update_invoice_notes(
     Raises:
         HTTPException: If invoice not found or validation fails
     """
-    # Create a temporary user object for the internal call
+    # Get actual user from database to preserve role information
     from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-    db_invoice = get_invoice(db, invoice_id, temp_user)
+    actual_user = db.query(User).filter(User.id == user_id).first()
+    if not actual_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db_invoice = get_invoice(db, invoice_id, actual_user)
     if not db_invoice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -620,10 +637,16 @@ def delete_invoice(db: Session, invoice_id: int, user_id: int) -> bool:
     Raises:
         HTTPException: If invoice not found or cannot be deleted
     """
-    # Create a temporary user object for the internal call
+    # Get actual user from database to preserve role information
     from app.models.user import User
-    temp_user = User(id=user_id, role='user')  # Default to regular user for isolation
-    db_invoice = get_invoice(db, invoice_id, temp_user)
+    actual_user = db.query(User).filter(User.id == user_id).first()
+    if not actual_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db_invoice = get_invoice(db, invoice_id, actual_user)
     if not db_invoice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -869,10 +892,16 @@ def update_payment(
     Raises:
         HTTPException: If payment not found
     """
-    # Create a temporary user object for the internal call
+    # Get actual user from database to preserve role information
     from app.models.user import User
-    temp_user = User(id=created_by, role='user')  # Default to regular user for isolation
-    db_payment = get_payment(db, payment_id, temp_user)
+    actual_user = db.query(User).filter(User.id == created_by).first()
+    if not actual_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db_payment = get_payment(db, payment_id, actual_user)
     if not db_payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -937,10 +966,16 @@ def update_payment_status(
     Raises:
         HTTPException: If payment not found
     """
-    # Create a temporary user object for the internal call
+    # Get actual user from database to preserve role information
     from app.models.user import User
-    temp_user = User(id=created_by, role='user')  # Default to regular user for isolation
-    db_payment = get_payment(db, payment_id, temp_user)
+    actual_user = db.query(User).filter(User.id == created_by).first()
+    if not actual_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db_payment = get_payment(db, payment_id, actual_user)
     if not db_payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1017,10 +1052,16 @@ def delete_payment(db: Session, payment_id: int, created_by: int) -> bool:
     Raises:
         HTTPException: If payment not found or cannot be deleted
     """
-    # Create a temporary user object for the internal call
+    # Get actual user from database to preserve role information
     from app.models.user import User
-    temp_user = User(id=created_by, role='user')  # Default to regular user for isolation
-    db_payment = get_payment(db, payment_id, temp_user)
+    actual_user = db.query(User).filter(User.id == created_by).first()
+    if not actual_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db_payment = get_payment(db, payment_id, actual_user)
     if not db_payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
