@@ -1064,7 +1064,7 @@ def delete_payment(db: Session, payment_id: int, created_by: int) -> bool:
 def convert_quote_to_invoice(
     db: Session,
     conversion_request: QuoteToInvoiceRequest,
-    user_id: int
+    current_user: User
 ) -> Invoice:
     """
     Convert a quote to an invoice
@@ -1072,7 +1072,7 @@ def convert_quote_to_invoice(
     Args:
         db: Database session
         conversion_request: Conversion request data
-        user_id: Current user ID for isolation
+        current_user: Current user (for role-based access control)
         
     Returns:
         Invoice: Created invoice
@@ -1080,13 +1080,18 @@ def convert_quote_to_invoice(
     Raises:
         HTTPException: If quote not found or cannot be converted
     """
-    # Get quote
-    quote = db.query(Quote).options(
+    # Get quote with role-based access control
+    query = db.query(Quote).options(
         joinedload(Quote.items).joinedload(QuoteItem.package),
         joinedload(Quote.villas).joinedload(QuoteVilla.villa)
-    ).filter(
-        and_(Quote.id == conversion_request.quote_id, Quote.user_id == user_id)
-    ).first()
+    ).filter(Quote.id == conversion_request.quote_id)
+    
+    # Apply role-based user isolation
+    user_filter = get_user_filter_condition(current_user, Quote.user_id)
+    if user_filter is not True:
+        query = query.filter(user_filter)
+    
+    quote = query.first()
     
     if not quote:
         raise HTTPException(
@@ -1116,7 +1121,8 @@ def convert_quote_to_invoice(
     
     # Create invoice from quote
     db_invoice = Invoice(
-        user_id=user_id,
+        user_id=quote.user_id,
+        sales_person_id=quote.sales_person_id,
         customer_id=quote.customer_id,
         invoice_number=invoice_number,
         quote_id=quote.id,
@@ -1126,6 +1132,7 @@ def convert_quote_to_invoice(
         check_out=quote.check_out,
         status=InvoiceStatus.draft,
         total=quote.total,
+        amount_due=quote.total,
         tax_total=Decimal('0.00'),
         notes=conversion_request.notes,
         created_at=datetime.utcnow(),
@@ -1163,7 +1170,7 @@ def convert_quote_to_invoice(
     safe_log_invoice_history(
         db=db,
         invoice_id=db_invoice.id,
-        user_id=user_id,
+        user_id=current_user.id,
         event_type="invoice_converted_from_quote",
         event_category="lifecycle",
         description=f"Invoice created from accepted quote #{quote.quote_number}",

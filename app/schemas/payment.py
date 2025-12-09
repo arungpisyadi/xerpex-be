@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator, field_validator, root_validator
+from pydantic import BaseModel, Field, validator, field_validator, root_validator, computed_field
 
 from app.schemas.villa import Villa
 
@@ -66,9 +66,13 @@ class InvoiceHistoryResponse(BaseModel):
     description: str
     user_name: Optional[str] = None
     user_email: Optional[str] = None
-    metadata: Optional[dict] = None
+    event_metadata: Optional[dict] = None
     created_at: datetime
-    formatted_date: str
+
+    @computed_field
+    @property
+    def formatted_date(self) -> str:
+        return self.created_at.strftime("%B %d, %Y at %I:%M %p")
 
     class Config:
         from_attributes = True

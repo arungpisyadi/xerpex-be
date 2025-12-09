@@ -398,7 +398,7 @@ async def convert_quote_to_invoice(
         invoice = convert_quote_to_invoice(
             db=db,
             conversion_request=invoice_request,
-            user_id=current_user.id
+            current_user=current_user
         )
         return {
             "message": "Quote successfully converted to invoice",
