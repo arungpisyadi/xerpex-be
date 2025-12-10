@@ -378,6 +378,34 @@ class QuoteToInvoiceRequest(BaseModel):
     notes: Optional[str] = None
 
 
+# Invoice to Booking Conversion
+class InvoiceToBookingRequest(BaseModel):
+    """Invoice to booking conversion request schema"""
+    invoice_id: int
+    check_in: date
+    check_out: date
+    total_pax: int = Field(default=1, gt=0)
+    notes: Optional[str] = None
+    
+    @validator('check_out')
+    def validate_check_out(cls, v, values):
+        """Validate that check_out is after check_in"""
+        if 'check_in' in values and v <= values['check_in']:
+            raise ValueError('Check-out date must be after check-in date')
+        return v
+
+
+class InvoiceToBookingResponse(BaseModel):
+    """Invoice to booking conversion response schema"""
+    message: str
+    booking_id: int
+    booking_code: str
+    invoice_id: int
+    
+    class Config:
+        from_attributes = True
+
+
 # Summary and Statistics Schemas
 class InvoiceSummary(BaseModel):
     """Invoice summary schema"""

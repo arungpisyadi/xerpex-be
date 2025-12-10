@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.payment import (
     InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceNotesUpdate, InvoiceResponse,
-    InvoiceStatus, QuoteToInvoiceRequest, InvoiceListResponse,
+    InvoiceStatus, QuoteToInvoiceRequest, InvoiceToBookingRequest, InvoiceListResponse,
     OverdueInvoicesResponse, OverdueInvoicesCheckResponse, InvoicePreviewResponse,
     InvoiceHistoryListResponse, InvoiceHistoryEventCategory
 )
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/invoices", tags=["invoices"])
 async def list_invoices(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
-    status: Optional[InvoiceStatus] = Query(None, description="Filter by invoice status"),
+    status: Optional[str] = Query(None, description="Filter by invoice status (comma-separated for multiple, e.g., 'pending,paid')"),
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
     search: Optional[str] = Query(None, description="Search by invoice number or customer name"),
     from_date: Optional[date] = Query(None, description="Filter by issue date from"),
@@ -41,14 +41,35 @@ async def list_invoices(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get list of invoices with optional filtering and search
+    Get list of invoices with optional filtering and search.
+    Status parameter accepts comma-separated values for filtering by multiple statuses.
     """
+    # Parse comma-separated status values
+    status_list = None
+    if status:
+        # Split by comma, strip whitespace, and filter out empty strings
+        status_values = [s.strip() for s in status.split(',') if s.strip()]
+        
+        # Validate each status value
+        valid_statuses = []
+        for status_val in status_values:
+            try:
+                # Validate that the status is a valid InvoiceStatus enum value
+                validated_status = InvoiceStatus(status_val)
+                valid_statuses.append(validated_status)
+            except ValueError:
+                # Skip invalid status values
+                pass
+        
+        # Only set status_list if we have valid statuses
+        status_list = valid_statuses if valid_statuses else None
+    
     invoices = get_invoices(
         db=db,
         current_user=current_user,
         skip=skip,
         limit=limit,
-        status=status,
+        status=status_list,
         customer_id=customer_id,
         search=search,
         from_date=from_date,
@@ -62,7 +83,7 @@ async def list_invoices(
         current_user=current_user,
         skip=0,
         limit=10000,
-        status=status,
+        status=status_list,
         customer_id=customer_id,
         search=search,
         from_date=from_date,
@@ -154,6 +175,36 @@ async def create_invoice_from_quote(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+
+@router.post("/{invoice_id}/convert-to-booking", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def convert_invoice_to_booking_endpoint(
+    invoice_id: int,
+    conversion_request: InvoiceToBookingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Convert an invoice to a booking
+    
+    Only invoices with status 'partially_paid' or 'paid' can be converted.
+    """
+    from app.services.payment import convert_invoice_to_booking as convert_service
+    
+    try:
+        result = convert_service(
+            db=db,
+            invoice_id=invoice_id,
+            request_data=conversion_request,
+            current_user=current_user
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
 
 
 @router.post("", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)

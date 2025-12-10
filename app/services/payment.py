@@ -18,7 +18,7 @@ from app.models.villa import Villa
 from app.schemas.payment import (
     InvoiceCreate, InvoiceUpdate, InvoiceStatusUpdate, InvoiceNotesUpdate,
     PaymentCreate, PaymentUpdate, PaymentStatusUpdate,
-    QuoteToInvoiceRequest, InvoiceStatus, PaymentStatus, PaymentMethod, PaymentType
+    QuoteToInvoiceRequest, InvoiceToBookingRequest, InvoiceStatus, PaymentStatus, PaymentMethod, PaymentType
 )
 from app.services.customer import get_customer
 from app.services.package import get_package
@@ -92,7 +92,7 @@ def get_invoices(
     current_user: User,
     skip: int = 0,
     limit: int = 100,
-    status: Optional[InvoiceStatus] = None,
+    status: Optional[List[InvoiceStatus]] = None,
     customer_id: Optional[int] = None,
     search: Optional[str] = None,
     from_date: Optional[date] = None,
@@ -107,7 +107,7 @@ def get_invoices(
         current_user: Current user (for role-based access control)
         skip: Number of records to skip
         limit: Maximum number of records to return
-        status: Filter by invoice status
+        status: Filter by invoice status (can be a list of statuses for multiple filtering)
         customer_id: Filter by customer ID
         search: Search by invoice number or customer name
         from_date: Filter by issue date from
@@ -129,7 +129,15 @@ def get_invoices(
     
     # Apply filters
     if status:
-        query = query.filter(Invoice.status == status)
+        # Handle both single status and list of statuses
+        if isinstance(status, list):
+            # Convert enum values to strings for comparison
+            status_values = [s.value if hasattr(s, 'value') else str(s) for s in status]
+            query = query.filter(Invoice.status.in_(status_values))
+        else:
+            # Backward compatibility: handle single status value
+            status_value = status.value if hasattr(status, 'value') else str(status)
+            query = query.filter(Invoice.status == status_value)
     
     if customer_id:
         query = query.filter(Invoice.customer_id == customer_id)
@@ -1223,6 +1231,165 @@ def convert_quote_to_invoice(
     )
     
     return db_invoice
+
+
+# Invoice to Booking Conversion
+def convert_invoice_to_booking(
+    db: Session,
+    invoice_id: int,
+    request_data: InvoiceToBookingRequest,
+    current_user: User
+) -> Dict[str, Any]:
+    """
+    Convert an invoice to a booking
+    
+    Args:
+        db: Database session
+        invoice_id: Invoice ID to convert
+        request_data: Conversion request data with check_in, check_out, total_pax, notes
+        current_user: Current user (for role-based access control)
+        
+    Returns:
+        Dict: Booking details
+        
+    Raises:
+        HTTPException: If invoice not found or cannot be converted
+    """
+    from app.models.booking import Booking, BookingItem, BookingVilla
+    from app.services.booking import safe_log_booking_history
+    from app.utils.helpers import generate_booking_code
+    
+    # Get invoice with role-based access control
+    invoice = get_invoice(db, invoice_id, current_user)
+    
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice not found"
+        )
+    
+    # Check if invoice status is valid for conversion
+    if invoice.status not in ['partially_paid', 'paid']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only invoices with status 'partially_paid' or 'paid' can be converted to bookings"
+        )
+    
+    # Check if invoice has already been converted
+    existing_booking = db.query(Booking).join(Invoice).filter(
+        Invoice.id == invoice_id
+    ).first()
+    if existing_booking:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invoice has already been converted to a booking"
+        )
+    
+    # Validate dates
+    if request_data.check_out <= request_data.check_in:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Check-out date must be after check-in date"
+        )
+    
+    # Generate unique booking code
+    booking_code = generate_booking_code()
+    while db.query(Booking).filter(Booking.booking_code == booking_code).first():
+        booking_code = generate_booking_code()
+    
+    # Create booking from invoice
+    db_booking = Booking(
+        user_id=invoice.user_id,
+        customer_id=invoice.customer_id,
+        sales_person_id=invoice.sales_person_id,
+        booking_code=booking_code,
+        check_in=request_data.check_in,
+        check_out=request_data.check_out,
+        total_pax=request_data.total_pax,
+        status='pending',  # New booking starts as pending
+        notes=request_data.notes,
+        total=invoice.total,
+        tax_total=invoice.tax_total,
+        amount_paid=Decimal('0.00'),  # New booking starts with 0 paid
+        amount_due=invoice.total,  # New booking owes the full amount
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    db.add(db_booking)
+    db.flush()  # Get the booking ID
+    
+    # Copy invoice items to booking items
+    for invoice_item in invoice.items:
+        booking_item = BookingItem(
+            booking_id=db_booking.id,
+            package_id=invoice_item.package_id,
+            unit_price=invoice_item.unit_price,
+            discount=invoice_item.discount,
+            pax=invoice_item.pax,
+            line_total=invoice_item.line_total,
+            created_at=datetime.utcnow()
+        )
+        db.add(booking_item)
+    
+    # Copy invoice villas to booking villas
+    for invoice_villa in invoice.villas:
+        booking_villa = BookingVilla(
+            booking_id=db_booking.id,
+            villa_id=invoice_villa.villa_id
+        )
+        db.add(booking_villa)
+    
+    db.commit()
+    db.refresh(db_booking)
+    
+    # Log invoice history event
+    safe_log_invoice_history(
+        db=db,
+        invoice_id=invoice.id,
+        user_id=current_user.id,
+        event_type="invoice_converted_to_booking",
+        event_category="lifecycle",
+        description=f"Invoice converted to booking #{db_booking.booking_code}",
+        metadata={
+            "booking_id": db_booking.id,
+            "booking_code": db_booking.booking_code,
+            "total_amount": str(db_booking.total),
+            "customer_name": invoice.customer.name
+        }
+    )
+    
+    # Log booking history event
+    safe_log_booking_history(
+        db=db,
+        booking_id=db_booking.id,
+        user_id=current_user.id,
+        change_type="created",
+        field_name="conversion_source",
+        old_value=None,
+        new_value="invoice",
+        payment_id=None
+    )
+    
+    # Add metadata for conversion details
+    safe_log_booking_history(
+        db=db,
+        booking_id=db_booking.id,
+        user_id=current_user.id,
+        change_type="created",
+        field_name="source_invoice",
+        old_value=None,
+        new_value=f"Invoice #{invoice.invoice_number}",
+        payment_id=None
+    )
+    
+    return {
+        "message": "Invoice successfully converted to booking",
+        "booking_id": db_booking.id,
+        "booking_code": db_booking.booking_code,
+        "invoice_id": invoice.id
+    }
+
 
 
 # Helper Functions
