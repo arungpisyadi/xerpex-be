@@ -695,17 +695,10 @@ def get_payment(db: Session, payment_id: int, current_user: User) -> Optional[Pa
         Payment: Payment or None
     """
     query = db.query(Payment).options(
+        joinedload(Payment.creator),
+        joinedload(Payment.booking),
         joinedload(Payment.invoice).joinedload(Invoice.customer),
-        joinedload(Payment.history).load_only(
-            PaymentHistory.id,
-            PaymentHistory.payment_id,
-            PaymentHistory.user_id,
-            PaymentHistory.event_type,
-            PaymentHistory.event_category,
-            PaymentHistory.description,
-            PaymentHistory.event_metadata,
-            PaymentHistory.created_at
-        )
+        joinedload(Payment.payment_history).joinedload(PaymentHistory.user)
     ).filter(Payment.id == payment_id)
     
     # Apply user isolation based on role
@@ -745,7 +738,10 @@ def get_payments(
         List[Payment]: List of payments
     """
     query = db.query(Payment).options(
-        joinedload(Payment.invoice).joinedload(Invoice.customer)
+        joinedload(Payment.creator),
+        joinedload(Payment.booking),
+        joinedload(Payment.invoice).joinedload(Invoice.customer),
+        joinedload(Payment.payment_history).joinedload(PaymentHistory.user)
     )
     
     # Apply user isolation based on role

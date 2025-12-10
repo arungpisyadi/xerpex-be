@@ -107,6 +107,59 @@ class PaymentHistoryResponse(BaseModel):
         from_attributes = True
 
 
+# Payment Nested Schemas for Response Objects
+class PaymentInvoiceNested(BaseModel):
+    """Nested invoice information in payment response"""
+    id: int
+    invoice_number: str
+    total: Decimal
+    amount_due: Decimal
+    status: InvoiceStatus
+    issue_date: date
+    due_date: date
+    
+    class Config:
+        from_attributes = True
+
+
+class PaymentCustomerNested(BaseModel):
+    """Nested customer information in payment response"""
+    id: int
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class PaymentCreatorNested(BaseModel):
+    """Nested creator (user) information in payment response"""
+    id: int
+    username: str
+    full_name: Optional[str] = None
+    email: str
+    role: str
+    
+    class Config:
+        from_attributes = True
+
+
+class PaymentBookingNested(BaseModel):
+    """Nested booking object for payment response"""
+    id: int
+    booking_code: str
+    status: str
+    check_in: date
+    check_out: date
+    total: Decimal
+    total_pax: int
+    
+    class Config:
+        from_attributes = True
+
+
 # ============================================================================
 # Invoice Villa Schemas
 # ============================================================================
@@ -355,15 +408,119 @@ class PaymentStatusUpdate(BaseModel):
 class PaymentResponse(PaymentBase):
     """Payment response schema"""
     id: int
-    created_by: int = Field(..., description="ID of the user who created the payment")
-    booking_id: Optional[int] = Field(None, description="Related booking ID if applicable")
+    created_by: PaymentCreatorNested = Field(..., description="User who created the payment")
+    booking: Optional[PaymentBookingNested] = Field(None, description="Nested booking object if payment is for a booking")
     payment_type: str = Field(..., description="Type of payment (down-payment, installment, or paid-off)")
     status: PaymentStatus = Field(..., description="Current status of the payment")
-    invoice_number: Optional[str] = None
-    customer_name: Optional[str] = None
+    invoice: Optional[PaymentInvoiceNested] = None
+    customer: Optional[PaymentCustomerNested] = None
     history: Optional[List[PaymentHistoryResponse]] = []
     created_at: datetime
     updated_at: datetime
+
+    @root_validator(pre=True)
+    def extract_nested_data(cls, values):
+        """Extract nested relationship data from SQLAlchemy objects"""
+        # If values is a SQLAlchemy model object, extract the nested data
+        if hasattr(values, '__dict__'):
+            result = {k: v for k, v in values.__dict__.items() if not k.startswith('_')}
+            
+            # Extract creator data
+            if hasattr(values, 'creator') and values.creator:
+                result['created_by'] = {
+                    'id': values.creator.id,
+                    'username': values.creator.username,
+                    'full_name': values.creator.full_name,
+                    'email': values.creator.email,
+                    'role': values.creator.role
+                }
+            
+            # Extract booking data
+            if hasattr(values, 'booking') and values.booking:
+                result['booking'] = {
+                    'id': values.booking.id,
+                    'booking_code': values.booking.booking_code,
+                    'status': values.booking.status,
+                    'check_in': values.booking.check_in,
+                    'check_out': values.booking.check_out,
+                    'total': values.booking.total,
+                    'total_pax': values.booking.total_pax
+                }
+            
+            # Extract invoice data
+            if hasattr(values, 'invoice') and values.invoice:
+                result['invoice'] = {
+                    'id': values.invoice.id,
+                    'invoice_number': values.invoice.invoice_number,
+                    'total': values.invoice.total,
+                    'amount_due': values.invoice.amount_due,
+                    'status': values.invoice.status,
+                    'issue_date': values.invoice.issue_date,
+                    'due_date': values.invoice.due_date
+                }
+                
+                # Extract customer data from invoice
+                if hasattr(values.invoice, 'customer') and values.invoice.customer:
+                    result['customer'] = {
+                        'id': values.invoice.customer.id,
+                        'name': values.invoice.customer.name,
+                        'email': values.invoice.customer.email,
+                        'phone': values.invoice.customer.phone_number,
+                        'address': values.invoice.customer.address
+                    }
+            
+            return result
+        
+        # If values is already a dict, check if it has nested objects
+        elif isinstance(values, dict):
+            # Extract creator data from dict
+            if 'creator' in values and values['creator']:
+                if hasattr(values['creator'], 'id'):
+                    values['created_by'] = {
+                        'id': values['creator'].id,
+                        'username': values['creator'].username,
+                        'full_name': values['creator'].full_name,
+                        'email': values['creator'].email,
+                        'role': values['creator'].role
+                    }
+            
+            # Extract booking data from dict
+            if 'booking' in values and values['booking']:
+                if hasattr(values['booking'], 'booking_code'):
+                    values['booking'] = {
+                        'id': values['booking'].id,
+                        'booking_code': values['booking'].booking_code,
+                        'status': values['booking'].status,
+                        'check_in': values['booking'].check_in,
+                        'check_out': values['booking'].check_out,
+                        'total': values['booking'].total,
+                        'total_pax': values['booking'].total_pax
+                    }
+            
+            # Extract invoice data from dict
+            if 'invoice' in values and values['invoice']:
+                if hasattr(values['invoice'], 'invoice_number'):
+                    values['invoice'] = {
+                        'id': values['invoice'].id,
+                        'invoice_number': values['invoice'].invoice_number,
+                        'total': values['invoice'].total,
+                        'amount_due': values['invoice'].amount_due,
+                        'status': values['invoice'].status,
+                        'issue_date': values['invoice'].issue_date,
+                        'due_date': values['invoice'].due_date
+                    }
+                    
+                    # Extract customer data from invoice
+                    if hasattr(values['invoice'], 'customer') and values['invoice'].customer:
+                        values['customer'] = {
+                            'id': values['invoice'].customer.id,
+                            'name': values['invoice'].customer.name,
+                            'email': values['invoice'].customer.email,
+                            'phone': values['invoice'].customer.phone_number,
+                            'address': values['invoice'].customer.address
+                        }
+        
+        return values
 
     class Config:
         from_attributes = True
