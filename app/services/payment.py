@@ -268,6 +268,7 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
     
     # Update invoice total
     db_invoice.total = total_amount + villas_total
+    db_invoice.amount_due = db_invoice.total  # Since amount_paid defaults to 0
     
     db.commit()
     db.refresh(db_invoice)
@@ -1191,6 +1192,7 @@ def convert_quote_to_invoice(
         status=InvoiceStatus.draft,
         total=quote.total,
         amount_paid=Decimal('0.00'),
+        amount_due=quote.total,  # ADD THIS LINE - since amount_paid is 0
         tax_total=Decimal('0.00'),
         notes=conversion_request.notes,
         created_at=datetime.utcnow(),
@@ -1319,8 +1321,8 @@ def convert_invoice_to_booking(
         notes=request_data.notes,
         total=invoice.total,
         tax_total=invoice.tax_total,
-        amount_paid=Decimal('0.00'),  # New booking starts with 0 paid
-        amount_due=invoice.total,  # New booking owes the full amount
+        amount_paid=invoice.amount_paid,  # Transfer payments from invoice
+        amount_due=invoice.amount_due,    # Transfer remaining balance from invoice
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )

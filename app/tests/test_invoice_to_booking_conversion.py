@@ -169,7 +169,8 @@ def create_test_invoice(
     package: Package,
     villa: Villa,
     status: str = "partially_paid",
-    total: Decimal = Decimal("52000000.00")
+    total: Decimal = Decimal("52000000.00"),
+    amount_paid: Decimal = Decimal("0.00")
 ) -> Invoice:
     """Helper function to create a test invoice with items and villas"""
     invoice = Invoice(
@@ -182,7 +183,8 @@ def create_test_invoice(
         check_out=date.today() + timedelta(days=13),
         status=status,
         total=total,
-        amount_paid=Decimal("0.00"),
+        amount_paid=amount_paid,
+        amount_due=total - amount_paid,
         tax_total=Decimal("0.00"),
         payment_terms="Due on receipt",
         notes="Test invoice for conversion",
@@ -270,8 +272,8 @@ class TestInvoiceToBookingConversion:
         assert booking.user_id == invoice.user_id
         assert booking.status == "pending"
         assert booking.total == invoice.total
-        assert booking.amount_paid == Decimal("0.00")
-        assert booking.amount_due == invoice.total
+        assert booking.amount_paid == invoice.amount_paid  # Preserves payment from invoice
+        assert booking.amount_due == invoice.amount_due    # Preserves remaining balance from invoice
     
     def test_successful_conversion_paid(
         self,
@@ -789,8 +791,8 @@ class TestInvoiceToBookingDataIntegrity:
         assert booking.notes == request_data.notes
         assert booking.total == invoice.total
         assert booking.tax_total == invoice.tax_total
-        assert booking.amount_paid == Decimal("0.00")
-        assert booking.amount_due == invoice.total
+        assert booking.amount_paid == invoice.amount_paid  # Preserves payment from invoice
+        assert booking.amount_due == invoice.amount_due    # Preserves remaining balance from invoice
     
     def test_conversion_items_copied(
         self,

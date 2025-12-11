@@ -332,6 +332,8 @@ class InvoiceResponse(InvoiceBase):
     quote_id: Optional[int] = None
     payment_terms: Optional[str] = None
     total: Decimal
+    amount_due: Decimal
+    amount_paid: Decimal
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None
     billing_address: Optional[str] = None
