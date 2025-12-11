@@ -29,6 +29,12 @@ class Customer(Base):
     invoices = relationship("Invoice", back_populates="customer", cascade="all, delete-orphan")
     bookings = relationship("Booking", back_populates="customer", cascade="all, delete-orphan")
     
+    # Property for compatibility with schemas expecting 'phone' field
+    @property
+    def phone(self):
+        """Alias for phone_number to match PaymentCustomerNested schema"""
+        return self.phone_number
+    
     # Constraints
     __table_args__ = (
         {"sqlite_autoincrement": True},  # For SQLite compatibility

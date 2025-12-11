@@ -668,7 +668,6 @@ def test_calculate_monthly_achievement(db: Session, test_user):
         due_date=date.today(),
         status="paid",
         total=1000000.00,
-        amount_due=0.00,
         tax_total=0.00,
         amount_paid=1000000.00
     )

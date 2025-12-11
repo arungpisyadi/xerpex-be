@@ -88,7 +88,6 @@ def test_invoice(db: Session, test_user, test_customer, test_package) -> Invoice
         status="sent",
         total=Decimal("1000000.00"),
         tax_total=Decimal("0.00"),
-        amount_due=Decimal("1000000.00"),
         amount_paid=Decimal("0.00"),
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
@@ -125,7 +124,6 @@ def test_booking(db: Session, test_user, test_customer) -> Booking:
         status="confirmed",
         total=Decimal("3000000.00"),
         amount_paid=Decimal("0.00"),
-        amount_due=Decimal("3000000.00"),
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )

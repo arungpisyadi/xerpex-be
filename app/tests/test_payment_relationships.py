@@ -1158,7 +1158,6 @@ class TestPaymentBookingRelationship:
             status="sent",
             total=Decimal("800000.00"),
             tax_total=Decimal("0.00"),
-            amount_due=Decimal("800000.00"),
             amount_paid=Decimal("0.00")
         )
         db.add(invoice2)

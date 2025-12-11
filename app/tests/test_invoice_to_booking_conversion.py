@@ -182,7 +182,7 @@ def create_test_invoice(
         check_out=date.today() + timedelta(days=13),
         status=status,
         total=total,
-        amount_due=total,
+        amount_paid=Decimal("0.00"),
         tax_total=Decimal("0.00"),
         payment_terms="Due on receipt",
         notes="Test invoice for conversion",

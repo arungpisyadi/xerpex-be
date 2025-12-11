@@ -408,13 +408,14 @@ class PaymentStatusUpdate(BaseModel):
 class PaymentResponse(PaymentBase):
     """Payment response schema"""
     id: int
+    booking_id: Optional[int] = Field(None, description="ID of the booking associated with this payment")
     created_by: PaymentCreatorNested = Field(..., description="User who created the payment")
     booking: Optional[PaymentBookingNested] = Field(None, description="Nested booking object if payment is for a booking")
     payment_type: str = Field(..., description="Type of payment (down-payment, installment, or paid-off)")
     status: PaymentStatus = Field(..., description="Current status of the payment")
     invoice: Optional[PaymentInvoiceNested] = None
     customer: Optional[PaymentCustomerNested] = None
-    history: Optional[List[PaymentHistoryResponse]] = []
+    history: List[PaymentHistoryResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -423,8 +424,25 @@ class PaymentResponse(PaymentBase):
         """Extract nested relationship data from SQLAlchemy objects"""
         # If values is a SQLAlchemy model object, extract the nested data
         if hasattr(values, '__dict__'):
-            result = {k: v for k, v in values.__dict__.items() if not k.startswith('_')}
+            # Define relationship attribute names to skip when copying scalar fields
+            relationship_attrs = {'creator', 'booking', 'invoice', 'customer',
+                                'invoice_history', 'payment_history', 'booking_history'}
             
+            # Start with all scalar fields from the model
+            result = {}
+            for k, v in values.__dict__.items():
+                # Skip SQLAlchemy internal fields starting with _
+                if k.startswith('_'):
+                    continue
+                
+                # Skip relationship attributes - we'll handle them separately
+                if k in relationship_attrs:
+                    continue
+                
+                # Include scalar database fields
+                result[k] = v
+            
+            # Now extract and transform the nested relationship objects
             # Extract creator data
             if hasattr(values, 'creator') and values.creator:
                 result['created_by'] = {
@@ -468,6 +486,20 @@ class PaymentResponse(PaymentBase):
                         'phone': values.invoice.customer.phone_number,
                         'address': values.invoice.customer.address
                     }
+            
+            # Also check for direct customer property (from model @property)
+            elif hasattr(values, 'customer') and values.customer:
+                result['customer'] = {
+                    'id': values.customer.id,
+                    'name': values.customer.name,
+                    'email': values.customer.email,
+                    'phone': values.customer.phone_number,
+                    'address': values.customer.address
+                }
+            
+            # Map payment_history to history
+            if hasattr(values, 'payment_history'):
+                result['history'] = values.payment_history
             
             return result
         
@@ -519,6 +551,21 @@ class PaymentResponse(PaymentBase):
                             'phone': values['invoice'].customer.phone_number,
                             'address': values['invoice'].customer.address
                         }
+            
+            # Also check for direct customer in dict
+            elif 'customer' in values and values['customer']:
+                if hasattr(values['customer'], 'id'):
+                    values['customer'] = {
+                        'id': values['customer'].id,
+                        'name': values['customer'].name,
+                        'email': values['customer'].email,
+                        'phone': values['customer'].phone_number,
+                        'address': values['customer'].address
+                    }
+            
+            # Map payment_history to history
+            if 'payment_history' in values:
+                values['history'] = values['payment_history']
         
         return values
 

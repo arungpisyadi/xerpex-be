@@ -424,8 +424,7 @@ class TestBookingHistory:
             total_pax=2,
             status="pending",
             total=Decimal("3000000.00"),
-            amount_paid=Decimal("0.00"),
-            amount_due=Decimal("3000000.00")
+            amount_paid=Decimal("0.00")
         )
         db.add(booking)
         db.commit()

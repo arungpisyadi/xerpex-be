@@ -34,6 +34,12 @@ class Payment(Base):
     payment_history = relationship("PaymentHistory", back_populates="payment", cascade="all, delete-orphan")
     booking_history = relationship("BookingHistory", back_populates="payment")
     
+    # Derived relationship - customer from invoice
+    @property
+    def customer(self):
+        """Get customer from invoice relationship"""
+        return self.invoice.customer if self.invoice else None
+    
     # Indexes
     __table_args__ = (
         Index('ix_payments_created_by', 'created_by'),
@@ -61,7 +67,7 @@ class Invoice(Base):
     status = Column(String(20), nullable=False, default="draft")
     payment_terms = Column(String(50), nullable=True)
     notes = Column(Text, nullable=True)
-    total = Column(Numeric(10, 2), nullable=False, default=0.00)
+    total = Column(Numeric(15, 2), nullable=False)
     amount_due = Column(Numeric(10, 2), nullable=False, default=0.00)
     tax_total = Column(Numeric(10, 2), nullable=False, default=0.00)
     amount_paid = Column(Numeric(10, 2), nullable=False, default=0.00)

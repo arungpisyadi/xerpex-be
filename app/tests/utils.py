@@ -93,7 +93,6 @@ def create_test_booking(
         total=Decimal('0.00'),
         tax_total=Decimal('0.00'),
         amount_paid=Decimal('0.00'),
-        amount_due=Decimal('0.00'),
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )

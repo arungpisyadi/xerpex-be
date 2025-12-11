@@ -264,7 +264,6 @@ def create_booking(db: Session, booking: BookingCreate, current_user: User) -> B
             total=Decimal('0.00'),
             tax_total=Decimal('0.00'),
             amount_paid=Decimal('0.00'),
-            amount_due=Decimal('0.00'),
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -324,9 +323,8 @@ def create_booking(db: Session, booking: BookingCreate, current_user: User) -> B
                 booking_code, current_user.id, is_available=False
             )
         
-        # Update booking totals
+        # Update booking totals (amount_due will be automatically calculated as total - amount_paid)
         db_booking.total = items_total + villas_total
-        db_booking.amount_due = db_booking.total
         
         # Create initial history record
         safe_log_booking_history(

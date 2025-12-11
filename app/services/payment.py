@@ -825,18 +825,28 @@ def create_payment(db: Session, payment: PaymentCreate, created_by: int) -> Paym
     db.commit()
     db.refresh(db_payment)
     
-    # Update invoice status based on payment status and type
-    if (db_payment.status == PaymentStatus.partial.value or
-        db_payment.payment_type in ["down-payment", "installment"]):
-        # Update invoice to partially_paid
-        db_payment.invoice.status = InvoiceStatus.partially_paid.value
-    elif (db_payment.status == PaymentStatus.full.value or
-          db_payment.payment_type == "paid-off"):
-        # Update invoice to paid
-        db_payment.invoice.status = InvoiceStatus.paid.value
+    # Update invoice amount_paid and amount_due
+    invoice.amount_paid = (invoice.amount_paid or Decimal('0.00')) + db_payment.amount
+    invoice.amount_due = invoice.total - invoice.amount_paid
+    
+    # If invoice has a booking, also update the booking's payment fields
+    if invoice.booking_id:
+        from app.models.booking import Booking
+        booking = db.query(Booking).filter(Booking.id == invoice.booking_id).first()
+        if booking:
+            booking.amount_paid = (booking.amount_paid or Decimal('0.00')) + db_payment.amount
+            booking.amount_due = booking.total - booking.amount_paid
+    
+    # Update invoice status based on amount_paid comparison
+    if invoice.amount_paid >= invoice.total:
+        # Fully paid
+        invoice.status = InvoiceStatus.paid.value
+    elif invoice.amount_paid > Decimal('0.00'):
+        # Partially paid
+        invoice.status = InvoiceStatus.partially_paid.value
+    # If amount_paid is 0, keep current status (don't change)
     
     db.commit()
-    db.refresh(db_payment)
     
     # Log history event for payment creation
     safe_log_invoice_history(
@@ -871,6 +881,9 @@ def create_payment(db: Session, payment: PaymentCreate, created_by: int) -> Paym
             "status": db_payment.status
         }
     )
+    
+    # Reload payment with all relationships for proper response serialization
+    db_payment = get_payment(db, db_payment.id, actual_user)
     
     return db_payment
 
@@ -1177,7 +1190,7 @@ def convert_quote_to_invoice(
         check_out=quote.check_out,
         status=InvoiceStatus.draft,
         total=quote.total,
-        amount_due=quote.total,
+        amount_paid=Decimal('0.00'),
         tax_total=Decimal('0.00'),
         notes=conversion_request.notes,
         created_at=datetime.utcnow(),
