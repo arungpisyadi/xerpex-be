@@ -1267,7 +1267,7 @@ def convert_invoice_to_booking(
         HTTPException: If invoice not found or cannot be converted
     """
     from app.models.booking import Booking, BookingItem, BookingVilla
-    from app.services.booking import safe_log_booking_history
+    from app.services.booking import safe_log_booking_history, update_villa_availability, check_villa_availability
     from app.utils.helpers import generate_booking_code
     
     # Get invoice with role-based access control
@@ -1302,6 +1302,20 @@ def convert_invoice_to_booking(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Check-out date must be after check-in date"
         )
+    
+    # Check villa availability for the requested dates
+    for invoice_villa in invoice.villas:
+        is_available, unavailable_dates = check_villa_availability(
+            db, invoice_villa.villa_id, request_data.check_in, request_data.check_out
+        )
+        
+        if not is_available:
+            villa = get_villa(db, invoice_villa.villa_id)
+            villa_name = villa.name if villa else f"Villa {invoice_villa.villa_id}"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{villa_name} is not available for the selected dates"
+            )
     
     # Generate unique booking code
     booking_code = generate_booking_code()
@@ -1343,13 +1357,19 @@ def convert_invoice_to_booking(
         )
         db.add(booking_item)
     
-    # Copy invoice villas to booking villas
+    # Copy invoice villas to booking villas and update availability
     for invoice_villa in invoice.villas:
         booking_villa = BookingVilla(
             booking_id=db_booking.id,
             villa_id=invoice_villa.villa_id
         )
         db.add(booking_villa)
+        
+        # Update villa availability - mark as unavailable for booking dates
+        update_villa_availability(
+            db, invoice_villa.villa_id, request_data.check_in, request_data.check_out,
+            booking_code, current_user.id, is_available=False
+        )
     
     db.commit()
     db.refresh(db_booking)

@@ -877,6 +877,109 @@ class TestInvoiceToBookingDataIntegrity:
         booking_villa_ids = {bv.villa_id for bv in booking_villas}
         assert invoice_villa_ids == booking_villa_ids
     
+    def test_conversion_records_villa_availability(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer,
+        test_package: Package,
+        test_villa: Villa
+    ):
+        """Test villa availability is recorded when converting invoice to booking"""
+        from app.models.villa import VillaAvailability
+        
+        invoice = create_test_invoice(
+            db, admin_user, test_customer, test_package, test_villa,
+            status="partially_paid"
+        )
+        
+        check_in = date.today() + timedelta(days=5)
+        check_out = date.today() + timedelta(days=8)
+        
+        request_data = InvoiceToBookingRequest(
+            invoice_id=invoice.id,
+            check_in=check_in,
+            check_out=check_out,
+            total_pax=4
+        )
+        
+        result = convert_invoice_to_booking(
+            db=db,
+            invoice_id=invoice.id,
+            request_data=request_data,
+            current_user=admin_user
+        )
+        
+        booking = db.query(Booking).filter(Booking.id == result["booking_id"]).first()
+        
+        # Verify villa availability records were created
+        availability_records = db.query(VillaAvailability).filter(
+            VillaAvailability.villa_id == test_villa.id,
+            VillaAvailability.date >= check_in,
+            VillaAvailability.date < check_out
+        ).all()
+        
+        # Should have records for each day (check_out is exclusive)
+        expected_days = (check_out - check_in).days
+        assert len(availability_records) == expected_days
+        
+        # Verify all records are marked as unavailable
+        for record in availability_records:
+            assert record.is_available == False
+            assert booking.booking_code in record.blocked_reason
+            assert record.updated_by == admin_user.id
+    
+    def test_conversion_checks_villa_availability_before_booking(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer,
+        test_package: Package,
+        test_villa: Villa
+    ):
+        """Test conversion fails if villa is not available for requested dates"""
+        from app.models.villa import VillaAvailability
+        
+        invoice = create_test_invoice(
+            db, admin_user, test_customer, test_package, test_villa,
+            status="paid"
+        )
+        
+        check_in = date.today() + timedelta(days=5)
+        check_out = date.today() + timedelta(days=8)
+        
+        # Block villa availability for one of the dates
+        blocked_date = check_in + timedelta(days=1)
+        blocked_availability = VillaAvailability(
+            villa_id=test_villa.id,
+            date=blocked_date,
+            is_available=False,
+            blocked_reason="Already booked",
+            updated_by=admin_user.id,
+            updated_at=datetime.utcnow()
+        )
+        db.add(blocked_availability)
+        db.commit()
+        
+        request_data = InvoiceToBookingRequest(
+            invoice_id=invoice.id,
+            check_in=check_in,
+            check_out=check_out,
+            total_pax=4
+        )
+        
+        # Conversion should fail due to villa not being available
+        with pytest.raises(HTTPException) as exc_info:
+            convert_invoice_to_booking(
+                db=db,
+                invoice_id=invoice.id,
+                request_data=request_data,
+                current_user=admin_user
+            )
+        
+        assert exc_info.value.status_code == 400
+        assert "not available" in exc_info.value.detail.lower()
+    
     def test_conversion_creates_unique_booking_code(
         self,
         db: Session,
