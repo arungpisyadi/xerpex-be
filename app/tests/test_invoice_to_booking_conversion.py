@@ -916,11 +916,11 @@ class TestInvoiceToBookingDataIntegrity:
         availability_records = db.query(VillaAvailability).filter(
             VillaAvailability.villa_id == test_villa.id,
             VillaAvailability.date >= check_in,
-            VillaAvailability.date < check_out
+            VillaAvailability.date <= check_out
         ).all()
         
-        # Should have records for each day (check_out is exclusive)
-        expected_days = (check_out - check_in).days
+        # Should have records for each day (check_out is now inclusive)
+        expected_days = (check_out - check_in).days + 1
         assert len(availability_records) == expected_days
         
         # Verify all records are marked as unavailable
