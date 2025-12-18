@@ -233,7 +233,12 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
     for item_data in invoice.items:
         # Validate package exists and belongs to user
         package = get_package(db, item_data.package_id)
-        if not package or package.user_id != current_user.id:
+        if not package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Package with ID {item_data.package_id} not found"
+            )
+        if should_apply_user_isolation(current_user) and package.user_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Package with ID {item_data.package_id} not found"
@@ -371,7 +376,14 @@ def update_invoice(
         for item_data in invoice_update.items:
             # Validate package
             package = get_package(db, item_data.package_id)
-            if not package or package.user_id != user_id:
+            if not package:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Package with ID {item_data.package_id} not found"
+                )
+            # Get user for role checking
+            user = db.query(User).filter(User.id == user_id).first()
+            if should_apply_user_isolation(user) and package.user_id != user_id:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Package with ID {item_data.package_id} not found"
