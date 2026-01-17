@@ -278,7 +278,7 @@ class InvoiceBase(BaseModel):
 
 class InvoiceCreate(InvoiceBase):
     """Invoice creation schema"""
-    villas: List[int] = []
+    villas: List[int] = Field(default=[], validation_alias='villa_ids')
     items: List[InvoiceItemCreate] = Field(..., min_items=1)
     quote_id: Optional[int] = None  # For quote-to-invoice conversion
     payment_terms: Optional[str] = "Due on receipt"  # Optional with default value
