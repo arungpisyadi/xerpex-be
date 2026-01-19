@@ -278,6 +278,7 @@ class InvoiceBase(BaseModel):
 
 class InvoiceCreate(InvoiceBase):
     """Invoice creation schema"""
+    sales_person_id: Optional[int] = None
     villas: List[int] = Field(default=[], validation_alias='villa_ids')
     items: List[InvoiceItemCreate] = Field(..., min_items=1)
     quote_id: Optional[int] = None  # For quote-to-invoice conversion

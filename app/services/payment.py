@@ -208,6 +208,7 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
     # Create invoice
     db_invoice = Invoice(
         user_id=current_user.id,
+        sales_person_id=invoice.sales_person_id,
         customer_id=invoice.customer_id,
         booking_id=None,  # Set to None for now as it's optional
         invoice_number=invoice_number,
