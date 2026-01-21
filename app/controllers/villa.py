@@ -78,7 +78,7 @@ async def get_available_villas_endpoint(
     
     Args:
         check_in: Start date of the availability check
-        check_out: End date of the availability check (must be after check_in)
+        check_out: End date of the availability check (must be on or after check_in)
         skip: Number of records to skip for pagination
         limit: Maximum number of records to return
         is_active: Filter by active status
@@ -90,13 +90,13 @@ async def get_available_villas_endpoint(
         VillaListResponse containing list of available villas and pagination info
         
     Raises:
-        HTTPException: 400 if check_out is not after check_in
+        HTTPException: 400 if check_out is before check_in
     """
     # Validate dates
-    if check_out <= check_in:
+    if check_out < check_in:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="check_out must be after check_in"
+            detail="check_out cannot be before check_in"
         )
     
     # Get available villas
