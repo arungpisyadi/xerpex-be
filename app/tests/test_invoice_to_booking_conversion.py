@@ -919,8 +919,8 @@ class TestInvoiceToBookingDataIntegrity:
             VillaAvailability.date <= check_out
         ).all()
         
-        # Should have records for each day (check_out is now inclusive)
-        expected_days = (check_out - check_in).days + 1
+        # Should have records for each day (check_out is now excluded)
+        expected_days = (check_out - check_in).days
         assert len(availability_records) == expected_days
         
         # Verify all records are marked as unavailable

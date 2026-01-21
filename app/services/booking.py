@@ -1388,7 +1388,7 @@ def check_villa_availability(
     exclude_booking_id: Optional[int] = None
 ) -> Tuple[bool, List[date]]:
     """
-    Check if a villa is available for the given dates (inclusive of both check-in and check-out dates)
+    Check if a villa is available for the given dates (check-in to one day before check-out)
     
     Args:
         db: Database session
@@ -1403,7 +1403,7 @@ def check_villa_availability(
     unavailable_dates = []
     current_date = check_in
     
-    while current_date <= check_out:
+    while current_date < check_out:
         # Check if date is blocked in villa_availability
         availability = db.query(VillaAvailability).filter(
             VillaAvailability.villa_id == villa_id,
@@ -1440,7 +1440,7 @@ def update_villa_availability(
     is_available: bool = False
 ) -> None:
     """
-    Update villa availability for date range (inclusive of both check-in and check-out dates)
+    Update villa availability for date range (check-in to one day before check-out)
     
     Args:
         db: Database session
@@ -1453,7 +1453,7 @@ def update_villa_availability(
     """
     current_date = check_in
     
-    while current_date <= check_out:
+    while current_date < check_out:
         # Check if availability record exists
         availability = db.query(VillaAvailability).filter(
             VillaAvailability.villa_id == villa_id,
