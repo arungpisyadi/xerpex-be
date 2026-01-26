@@ -263,22 +263,87 @@ def test_regular_user_cannot_get_other_users_payment(db: Session, setup_users_an
     assert retrieved_payment is None
 
 
-def test_admin_can_delete_pending_payment_from_other_user(db: Session, setup_users_and_payment):
-    """Test that admin can delete pending payments created by other users."""
+def test_admin_can_delete_payment_with_any_status(db: Session, setup_users_and_payment):
+    """Test that admin can delete payments with any status created by other users."""
     data = setup_users_and_payment
     payment = data['payment']
     admin_user = data['admin_user']
     
-    # Ensure payment is in pending status
+    # Test deleting payment with pending status
     assert payment.status == "pending"
     
-    # Admin should be able to delete the pending payment
+    # Admin should be able to delete the payment regardless of status
     result = delete_payment(db=db, payment_id=payment.id, created_by=admin_user.id)
     
     assert result is True
     
     # Verify payment is deleted
     deleted_payment = db.query(Payment).filter(Payment.id == payment.id).first()
+    assert deleted_payment is None
+    
+    # Create another payment with completed status
+    completed_payment = Payment(
+        created_by=data['regular_user'].id,
+        invoice_id=data['invoice'].id,
+        amount=Decimal("75.00"),
+        payment_method="bank_transfer",
+        payment_date=date.today(),
+        status="completed",
+        reference_number="PAY-002"
+    )
+    db.add(completed_payment)
+    db.commit()
+    db.refresh(completed_payment)
+    
+    # Admin should be able to delete completed payment too
+    result = delete_payment(db=db, payment_id=completed_payment.id, created_by=admin_user.id)
+    assert result is True
+    
+    # Verify completed payment is deleted
+    deleted_completed = db.query(Payment).filter(Payment.id == completed_payment.id).first()
+    assert deleted_completed is None
+
+
+def test_regular_user_cannot_delete_payment(db: Session, setup_users_and_payment):
+    """Test that regular users without proper roles cannot delete payments."""
+    data = setup_users_and_payment
+    payment = data['payment']
+    regular_user = data['regular_user']
+    
+    # Regular user should NOT be able to delete payment even if they created it
+    with pytest.raises(HTTPException) as exc_info:
+        delete_payment(db=db, payment_id=payment.id, created_by=regular_user.id)
+    
+    assert exc_info.value.status_code == 403
+    assert "permission" in str(exc_info.value.detail).lower()
+
+
+def test_finance_can_delete_payment_with_any_status(db: Session, setup_users_and_payment):
+    """Test that finance users can delete payments with any status."""
+    data = setup_users_and_payment
+    invoice = data['invoice']
+    finance_user = data['finance_user']
+    
+    # Create a completed payment
+    completed_payment = Payment(
+        created_by=data['regular_user'].id,
+        invoice_id=invoice.id,
+        amount=Decimal("60.00"),
+        payment_method="credit_card",
+        payment_date=date.today(),
+        status="completed",
+        reference_number="PAY-FIN-001"
+    )
+    db.add(completed_payment)
+    db.commit()
+    db.refresh(completed_payment)
+    
+    # Finance should be able to delete completed payment
+    result = delete_payment(db=db, payment_id=completed_payment.id, created_by=finance_user.id)
+    assert result is True
+    
+    # Verify payment is deleted
+    deleted_payment = db.query(Payment).filter(Payment.id == completed_payment.id).first()
     assert deleted_payment is None
 
 

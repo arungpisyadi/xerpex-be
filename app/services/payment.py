@@ -1099,18 +1099,18 @@ def delete_payment(db: Session, payment_id: int, created_by: int) -> bool:
             detail="User not found"
         )
     
+    # Check if user has permission to delete payments (finance, manager, or admin only)
+    if actual_user.role not in ["finance", "manager", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete payments. Only finance, manager, and admin roles can delete."
+        )
+    
     db_payment = get_payment(db, payment_id, actual_user)
     if not db_payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found"
-        )
-    
-    # Only allow deletion of pending payments
-    if db_payment.status != PaymentStatus.pending:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only pending payments can be deleted"
         )
     
     # Log payment history event before deletion

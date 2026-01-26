@@ -788,11 +788,11 @@ class TestPaymentErrorHandling:
         assert exc_info.value.status_code == 404
         assert "not found" in exc_info.value.detail.lower()
     
-    def test_delete_only_pending_payments(
-        self, db: Session, test_user, test_invoice
+    def test_delete_payment_requires_proper_role(
+        self, db: Session, test_user, test_invoice, test_admin
     ):
-        """Test that only pending payments can be deleted"""
-        # Arrange
+        """Test that only users with finance, manager, or admin roles can delete payments"""
+        # Arrange - Create a completed payment
         payment_data = PaymentCreate(
             invoice_id=test_invoice.id,
             amount=Decimal("250000.00"),
@@ -803,11 +803,15 @@ class TestPaymentErrorHandling:
         )
         payment = create_payment(db, payment_data, created_by=test_user["id"])
         
-        # Act & Assert
+        # Act & Assert - Regular user should not be able to delete
         with pytest.raises(Exception) as exc_info:
             delete_payment(db, payment.id, created_by=test_user["id"])
-        assert exc_info.value.status_code == 400
-        assert "pending" in exc_info.value.detail.lower() or "deleted" in exc_info.value.detail.lower()
+        assert exc_info.value.status_code == 403
+        assert "permission" in exc_info.value.detail.lower()
+        
+        # Admin should be able to delete payment with any status
+        result = delete_payment(db, payment.id, created_by=test_admin["id"])
+        assert result is True
     
     def test_get_nonexistent_payment_returns_none(
         self, db: Session, test_user
