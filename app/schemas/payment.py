@@ -329,6 +329,7 @@ class InvoiceResponse(InvoiceBase):
     """Invoice response schema"""
     id: int
     user_id: int
+    sales_person_id: Optional[int] = None
     invoice_number: str
     quote_id: Optional[int] = None
     payment_terms: Optional[str] = None

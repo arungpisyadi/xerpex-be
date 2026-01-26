@@ -334,12 +334,8 @@ def update_invoice(
             detail="Invoice not found"
         )
     
-    # Check if invoice can be modified
-    if db_invoice.status in ['paid', 'cancelled']:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot modify invoice with status '{db_invoice.status}'"
-        )
+    # Status validation removed - users with appropriate roles (admin, manager, finance, sales)
+    # can now edit invoices with any status
     
     # Update invoice fields (exclude items and villas as they're handled separately)
     update_data = invoice_update.dict(exclude_unset=True, exclude={'items', 'villas'})
@@ -610,12 +606,8 @@ def update_invoice_notes(
             detail="Invoice not found"
         )
     
-    # Check if invoice can be modified
-    if db_invoice.status in ['paid', 'cancelled']:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot modify invoice with status '{db_invoice.status}'"
-        )
+    # Status validation removed - users with appropriate roles (admin, manager, finance, sales)
+    # can now edit invoice notes with any status
     
     # Store old notes for history logging
     old_notes = db_invoice.notes

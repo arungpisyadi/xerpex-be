@@ -40,13 +40,6 @@ async def read_users(
     Returns:
         List[User]: List of users
     """
-    # Only admin and manager can list all users
-    if current_user.role not in ["admin", "manager", "sales"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-    
     users = get_users(db, skip=skip, limit=limit, role=role, is_active=is_active)
     return users
 
