@@ -256,3 +256,17 @@ def get_user_filter_condition(user: User, model_user_id_field):
     if should_apply_user_isolation(user):
         return model_user_id_field == user.id
     return True  # No filter for admin/finance roles
+
+
+def has_delete_permission(user: User) -> bool:
+    """
+    Check if user has permission to delete invoices
+    Only admin and finance roles can delete.
+    
+    Args:
+        user: Current user
+        
+    Returns:
+        bool: True if user can delete invoices, False otherwise
+    """
+    return user.role in ["admin", "finance"]

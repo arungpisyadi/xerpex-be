@@ -24,7 +24,7 @@ from app.services.customer import get_customer
 from app.services.package import get_package
 from app.services.villa import get_villa
 from app.utils.helpers import generate_invoice_number
-from app.utils.security import get_user_filter_condition, should_apply_user_isolation
+from app.utils.security import get_user_filter_condition, should_apply_user_isolation, has_delete_permission
 
 
 # Invoice Services
@@ -666,6 +666,13 @@ def delete_invoice(db: Session, invoice_id: int, user_id: int) -> bool:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
+        )
+    
+    # Check if user has permission to delete invoices
+    if not has_delete_permission(actual_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete invoices. Only admin and finance roles can delete."
         )
     
     db_invoice = get_invoice(db, invoice_id, actual_user)
