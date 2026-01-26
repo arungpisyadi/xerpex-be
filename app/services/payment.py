@@ -1121,6 +1121,10 @@ def delete_payment(db: Session, payment_id: int, created_by: int) -> bool:
         }
     )
     
+    # Delete related invoice_history records that reference this payment
+    # This ensures data integrity when a payment is deleted
+    db.query(InvoiceHistory).filter(InvoiceHistory.payment_id == payment_id).delete()
+    
     invoice = db_payment.invoice
     db.delete(db_payment)
     db.commit()
