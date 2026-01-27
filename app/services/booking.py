@@ -611,25 +611,16 @@ def delete_booking(db: Session, booking_id: int, current_user: User) -> bool:
                 detail="Only pending or cancelled bookings can be deleted"
             )
         
-        # Free up villa availability
+        # Delete villa availability entries for all booking villas
         for booking_villa in db_booking.villas:
-            update_villa_availability(
-                db, booking_villa.villa_id, 
+            delete_villa_availability(
+                db, booking_villa.villa_id,
                 db_booking.check_in, db_booking.check_out,
-                db_booking.booking_code, current_user.id, 
-                is_available=True
+                db_booking.booking_code
             )
         
-        # Log history event before deletion
-        safe_log_booking_history(
-            db=db,
-            booking_id=db_booking.id,
-            user_id=current_user.id,
-            change_type="deleted",
-            field_name="status",
-            old_value=db_booking.status,
-            new_value=None
-        )
+        # Note: History logging skipped as it would reference deleted booking
+        # The BookingHistory entries will be automatically deleted via CASCADE
         
         db.delete(db_booking)
         db.commit()
@@ -1487,6 +1478,47 @@ def update_villa_availability(
                 updated_at=datetime.utcnow()
             )
             db.add(db_availability)
+        
+        current_date += timedelta(days=1)
+
+
+def delete_villa_availability(
+    db: Session,
+    villa_id: int,
+    check_in: date,
+    check_out: date,
+    booking_code: str
+) -> None:
+    """
+    Delete villa availability entries for a booking's date range
+    
+    This function removes villa_availability entries that were created when
+    a booking was made, effectively releasing the villa back to available status.
+    
+    Args:
+        db: Database session
+        villa_id: Villa ID
+        check_in: Check-in date
+        check_out: Check-out date
+        booking_code: Booking code to identify which entries to delete
+    """
+    # Skip villa availability for same-day bookings
+    if check_in == check_out:
+        return
+    
+    current_date = check_in
+    
+    while current_date < check_out:
+        # Find and delete the availability record for this booking
+        availability = db.query(VillaAvailability).filter(
+            VillaAvailability.villa_id == villa_id,
+            VillaAvailability.date == current_date,
+            VillaAvailability.blocked_reason.like(f"%Booking Code: {booking_code}%")
+        ).first()
+        
+        if availability:
+            db.delete(availability)
+            logger.info(f"Deleted villa_availability for villa {villa_id} on {current_date} (booking {booking_code})")
         
         current_date += timedelta(days=1)
 
