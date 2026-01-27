@@ -1400,6 +1400,7 @@ def check_villa_availability(
     Returns:
         Tuple[bool, List[date]]: (is_available, list of unavailable dates)
     """
+    print(f"Checking availability for villa {villa_id} from {check_in} to {check_out}")
     unavailable_dates = []
     current_date = check_in
     
@@ -1410,6 +1411,7 @@ def check_villa_availability(
             VillaAvailability.date == current_date,
             VillaAvailability.is_available == False
         ).first()
+        print(f"Checking availability for {current_date}: {availability}")
         
         if availability:
             # Check if it's blocked by the excluded booking
@@ -1427,6 +1429,7 @@ def check_villa_availability(
         current_date += timedelta(days=1)
     
     is_available = len(unavailable_dates) == 0
+    print(f"Villa {villa_id} availability check result: {is_available}, unavailable dates: {unavailable_dates}")
     return is_available, unavailable_dates
 
 
