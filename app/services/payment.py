@@ -674,19 +674,12 @@ def delete_invoice(db: Session, invoice_id: int, user_id: int) -> bool:
             detail="Invoice not found"
         )
     
-    # Only allow deletion of draft invoices
-    if db_invoice.status != 'draft':
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only draft invoices can be deleted"
-        )
-    
     # Check if invoice has payments
-    if db_invoice.payments:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete invoice with payments"
-        )
+    # if db_invoice.payments:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail="Cannot delete invoice with payments"
+    #     )
     
     db.delete(db_invoice)
     db.commit()
