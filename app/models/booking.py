@@ -60,7 +60,7 @@ class Booking(Base):
             name="check_booking_status"
         ),
         CheckConstraint(
-            "check_out > check_in",
+            "check_out >= check_in",
             name="check_booking_dates"
         ),
         {"sqlite_autoincrement": True},

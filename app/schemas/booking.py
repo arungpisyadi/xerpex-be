@@ -206,8 +206,8 @@ class BookingBase(BaseModel):
     @field_validator('check_out')
     @classmethod
     def validate_check_out(cls, v, info):
-        if 'check_in' in info.data and v <= info.data['check_in']:
-            raise ValueError('check_out must be after check_in')
+        if 'check_in' in info.data and v < info.data['check_in']:
+            raise ValueError('check_out must be on or after check_in')
         return v
 
     @field_validator('total_pax')
@@ -247,8 +247,8 @@ class BookingUpdate(BaseModel):
     @classmethod
     def validate_check_out(cls, v, info):
         if v is not None and 'check_in' in info.data and info.data['check_in'] is not None:
-            if v <= info.data['check_in']:
-                raise ValueError('check_out must be after check_in')
+            if v < info.data['check_in']:
+                raise ValueError('check_out must be on or after check_in')
         return v
 
     @field_validator('total_pax')

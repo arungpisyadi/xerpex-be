@@ -1454,6 +1454,10 @@ def update_villa_availability(
         user_id: User ID
         is_available: Whether to mark as available or unavailable
     """
+    # Skip villa availability for same-day bookings
+    if check_in == check_out:
+        return
+    
     current_date = check_in
     
     while current_date < check_out:

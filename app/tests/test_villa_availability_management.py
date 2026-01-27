@@ -709,3 +709,82 @@ class TestMultipleBackToBackBookings:
         # Verify Feb 5 is blocked by Booking B (it's the check-in, not checkout for that booking)
         assert verify_date_blocked(db, test_villa_a.id, date(2026, 2, 5), booking_b.booking_code), \
             "Feb 5 should be blocked as it's Booking B's check-in date (and Booking A's checkout)"
+
+
+# ============================================================================
+# Test 8: Same Day Booking (check_in == check_out) - No Availability Records
+# ============================================================================
+
+class TestSameDayBookingAvailability:
+    """Test that same-day bookings (check_in == check_out) do NOT create villa_availability records"""
+    
+    def test_same_day_booking_no_availability_records(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer,
+        test_villa_a: Villa
+    ):
+        """
+        Verify that same-day bookings do NOT create villa_availability records.
+        
+        Scenario:
+        - Create booking with check_in = check_out (same date)
+        - Query villa_availability table for that villa and date
+        - Assert NO records exist in villa_availability for the booked villa
+        - Verify the booking was still created successfully
+        
+        Expected:
+        - Booking is created successfully
+        - NO villa_availability records are created
+        - get_blocked_dates() returns empty list for the villa
+        - The same date is available (no blocking)
+        
+        Business Logic:
+        When check_in == check_out, there are 0 nights (day-use only).
+        The system should NOT create availability blocks for 0-night bookings.
+        """
+        # Arrange
+        same_date = date(2026, 3, 15)
+        
+        # Act - Create same-day booking (check_in == check_out)
+        booking_data = BookingCreate(
+            customer_id=test_customer.id,
+            check_in=same_date,
+            check_out=same_date,
+            total_pax=2,
+            villas=[test_villa_a.id],
+            items=[],
+            status="confirmed"
+        )
+        booking = create_booking(db, booking_data, admin_user)
+        
+        # Assert - Verify booking was created successfully
+        assert booking.id is not None, "Booking should be created successfully"
+        assert booking.check_in == same_date, "Check-in should be the same date"
+        assert booking.check_out == same_date, "Check-out should be the same date"
+        assert booking.booking_code is not None, "Booking code should be generated"
+        
+        # Assert - Verify NO villa_availability records were created
+        blocked_dates = get_blocked_dates(db, test_villa_a.id)
+        assert len(blocked_dates) == 0, \
+            f"Same-day booking should create NO availability records, but found {len(blocked_dates)}"
+        
+        # Assert - Verify the date is NOT blocked
+        assert verify_date_available(db, test_villa_a.id, same_date), \
+            f"Date {same_date} should remain available for same-day booking"
+        
+        # Assert - Verify no VillaAvailability record exists for this date/villa
+        availability_record = db.query(VillaAvailability).filter(
+            VillaAvailability.villa_id == test_villa_a.id,
+            VillaAvailability.date == same_date
+        ).first()
+        
+        assert availability_record is None, \
+            f"No VillaAvailability record should exist for same-day booking, but found: {availability_record}"
+        
+        # Assert - Verify booking is actually in the database
+        db_booking = db.query(Booking).filter(Booking.id == booking.id).first()
+        assert db_booking is not None, "Booking should exist in database"
+        assert db_booking.check_in == same_date
+        assert db_booking.check_out == same_date
