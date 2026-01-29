@@ -42,6 +42,7 @@ def get_invoice(db: Session, invoice_id: int, current_user: User) -> Optional[In
     """
     query = db.query(Invoice).options(
         joinedload(Invoice.customer),
+        joinedload(Invoice.sales_person),
         joinedload(Invoice.items).joinedload(InvoiceItem.package),
         joinedload(Invoice.villas).joinedload(InvoiceVilla.villa),
         joinedload(Invoice.payments),
@@ -79,6 +80,7 @@ def get_invoice_by_number(db: Session, invoice_number: str, user_id: int) -> Opt
     """
     return db.query(Invoice).options(
         joinedload(Invoice.customer),
+        joinedload(Invoice.sales_person),
         joinedload(Invoice.items).joinedload(InvoiceItem.package),
         joinedload(Invoice.villas).joinedload(InvoiceVilla.villa),
         joinedload(Invoice.payments)
@@ -119,6 +121,7 @@ def get_invoices(
     """
     query = db.query(Invoice).options(
         joinedload(Invoice.customer),
+        joinedload(Invoice.sales_person),
         joinedload(Invoice.villas).joinedload(InvoiceVilla.villa)
     )
     

@@ -339,6 +339,7 @@ class InvoiceResponse(InvoiceBase):
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None
     billing_address: Optional[str] = None
+    sales_person: Optional[str] = None
     items: List[InvoiceItemResponse] = []
     villas: List[InvoiceVilla] = []
     payments: List['PaymentResponse'] = []
@@ -348,7 +349,7 @@ class InvoiceResponse(InvoiceBase):
 
     @root_validator(pre=True)
     def extract_customer_data(cls, values):
-        """Extract customer name, email, and billing address from the customer relationship"""
+        """Extract customer name, email, billing address, and sales person from relationships"""
         # If values is a SQLAlchemy model object, extract the customer data
         if hasattr(values, 'customer') and values.customer:
             # Create a dict from the object and add the customer fields
@@ -361,6 +362,13 @@ class InvoiceResponse(InvoiceBase):
                 # Extract billing address with fallback
                 billing_addr = values.customer.billing_address or values.customer.address
                 result['billing_address'] = billing_addr
+                
+                # Extract sales person full_name if available
+                if hasattr(values, 'sales_person') and values.sales_person:
+                    result['sales_person'] = values.sales_person.full_name if values.sales_person.full_name else None
+                else:
+                    result['sales_person'] = None
+                
                 return result
         # If values is already a dict, check if it has a customer key
         elif isinstance(values, dict) and 'customer' in values:
@@ -372,6 +380,13 @@ class InvoiceResponse(InvoiceBase):
                 # Extract billing address with fallback
                 billing_addr = values['customer'].billing_address or values['customer'].address
                 values['billing_address'] = billing_addr
+            
+            # Extract sales person full_name from dict
+            if 'sales_person' in values and values['sales_person']:
+                if hasattr(values['sales_person'], 'full_name'):
+                    values['sales_person'] = values['sales_person'].full_name if values['sales_person'].full_name else None
+            else:
+                values['sales_person'] = None
         return values
 
     class Config:
