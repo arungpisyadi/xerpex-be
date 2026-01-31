@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.kpi import KPIResponse
 from app.schemas.revenue import MonthlyRevenueResponse, CurrentMonthPerformanceResponse, CurrentYearPerformanceResponse
+from app.schemas.kpi import MonthlyRevenuePerSalesResponse
 from app.services.kpi import KPIService
 from app.services.revenue import RevenueService
 from app.utils.security import get_current_active_user
@@ -164,4 +165,23 @@ async def get_current_year_performance_endpoint(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving current year performance: {str(e)}"
+        )
+
+
+@router.get("/monthly_revenue_per_sales", response_model=MonthlyRevenuePerSalesResponse)
+async def get_monthly_revenue_per_sales_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get monthly revenue per sales person for the current month.
+    Admin/Finance users see all sales persons' performance.
+    Sales users see only their own performance.
+    """
+    try:
+        return KPIService.get_monthly_revenue_per_sales(db=db, current_user=current_user)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving monthly revenue per sales: {str(e)}"
         )

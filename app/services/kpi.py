@@ -13,8 +13,10 @@ from app.models.customer import Customer
 from app.models.booking import Booking
 from app.models.survey import Survey
 from app.models.quote import Quote
+from app.models.payment import Invoice
 from app.models.user import User
-from app.schemas.kpi import KPIResponse, KPIStatsResponse
+from app.models.target import Target
+from app.schemas.kpi import KPIResponse, KPIStatsResponse, MonthlyRevenuePerSalesResponse, SalesPersonPerformance
 from app.utils.security import get_user_filter_condition
 
 
@@ -297,6 +299,124 @@ class KPIService:
             surveys=KPIService.get_surveys_kpi(db, current_user),
             quotes=KPIService.get_quotes_kpi(db, current_user)
         )
+    
+    @staticmethod
+    def _get_scalar_value(value):
+        """Get scalar value from a possibly Column-wrapped value"""
+        if hasattr(value, '__iter__'):
+            # It's a Column, return the first element or default
+            return value
+        return value
+    
+    @staticmethod
+    def get_monthly_revenue_per_sales(db: Session, current_user: User) -> MonthlyRevenuePerSalesResponse:
+        """
+        Get monthly revenue per sales person for the current month
+        
+        Args:
+            db: Database session
+            current_user: Current user for role-based access control
+            
+        Returns:
+            MonthlyRevenuePerSalesResponse: Revenue per sales person data
+        """
+        jakarta_tz = KPIService._get_jakarta_timezone()
+        now_jakarta = datetime.now(jakarta_tz)
+        
+        current_year = now_jakarta.year
+        current_month = now_jakarta.month
+        month_name_str = month_name[current_month]
+        
+        # Get start and end of current month
+        start_current, end_current, _ = KPIService._get_current_month_range()
+        
+        # Convert to UTC for database queries
+        start_current_utc = start_current.astimezone(pytz.UTC)
+        end_current_utc = end_current.astimezone(pytz.UTC)
+        
+        # Get all sales users with scalar values
+        sales_users = db.query(User.id, User.full_name).filter(
+            User.role == 'sales',
+            User.is_active == True
+        ).all()
+        
+        # Build base query for invoices with sales_person_id
+        base_query = db.query(
+            Invoice.sales_person_id,
+            func.sum(Invoice.total).label('total_revenue')
+        ).filter(
+            and_(
+                Invoice.sales_person_id.isnot(None),
+                Invoice.created_at >= start_current_utc,
+                Invoice.created_at < end_current_utc
+            )
+        )
+        
+        # Apply user isolation - admin/finance see all, sales see only their own
+        user_filter = get_user_filter_condition(current_user, Invoice.sales_person_id)
+        if user_filter is not True:
+            base_query = base_query.filter(user_filter)
+        
+        # Group by sales_person_id
+        base_query = base_query.group_by(Invoice.sales_person_id)
+        
+        # Execute query
+        results = base_query.all()
+        
+        # Create a mapping of sales_person_id to revenue
+        revenue_by_sales = {row.sales_person_id: float(row.total_revenue or 0) for row in results}
+        
+        # Query sales targets for current month and year
+        targets = db.query(Target).filter(
+            and_(
+                Target.year == current_year,
+                Target.month == current_month
+            )
+        ).all()
+        
+        # Create a mapping of user_id to target amount (using adjusted_target_amount)
+        target_by_user = {}
+        for target in targets:
+            adjusted = float(target.adjusted_target_amount) if target.adjusted_target_amount is not None else 0.0
+            original = float(target.target_amount) if target.target_amount is not None else 0.0
+            target_amount = adjusted if adjusted > 0 else original
+            target_by_user[target.user_id] = target_amount
+        
+        # Build sales performance list
+        sales_performance = []
+        
+        # If current user is admin/finance, show all sales users with their revenue
+        # If current user is sales, show only their own performance
+        if current_user.role in ['admin', 'finance']:
+            for user_id, user_name in sales_users:
+                user_id_int = int(user_id)
+                user_name_str = str(user_name) if user_name else f"User {user_id_int}"
+                revenue = revenue_by_sales.get(user_id_int, 0.0)
+                target = target_by_user.get(user_id_int, 0.0)
+                sales_performance.append(SalesPersonPerformance(
+                    sales_person_id=user_id_int,
+                    sales_person_name=user_name_str,
+                    revenues=revenue,
+                    target=target
+                ))
+        else:
+            # Sales user - show only their own data
+            current_user_id = int(current_user.id)  # type: ignore
+            current_user_name = str(current_user.full_name) if current_user.full_name else f"User {current_user_id}"  # type: ignore
+            revenue = revenue_by_sales.get(current_user_id, 0.0)
+            target = target_by_user.get(current_user_id, 0.0)
+            sales_performance.append(SalesPersonPerformance(
+                sales_person_id=current_user_id,
+                sales_person_name=current_user_name,
+                revenues=revenue,
+                target=target
+            ))
+        
+        return MonthlyRevenuePerSalesResponse(
+            month=month_name_str,
+            year=str(current_year),
+            sales_performance=sales_performance
+        )
 
 
 # Service functions for backward compatibility and easier import
@@ -323,3 +443,8 @@ def get_quotes_kpi(db: Session, current_user: User) -> KPIResponse:
 def get_all_kpis(db: Session, current_user: User) -> KPIStatsResponse:
     """Get all KPIs"""
     return KPIService.get_all_kpis(db, current_user)
+
+
+def get_monthly_revenue_per_sales(db: Session, current_user: User) -> MonthlyRevenuePerSalesResponse:
+    """Get monthly revenue per sales person"""
+    return KPIService.get_monthly_revenue_per_sales(db, current_user)
