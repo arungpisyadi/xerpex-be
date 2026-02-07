@@ -26,7 +26,7 @@ router = APIRouter(prefix="/surveys", tags=["surveys"])
 @router.get("", response_model=List[SurveySchema])
 async def read_surveys(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 999999,
     status: Optional[SurveyStatus] = Query(None, description="Filter by survey status"),
     priority: Optional[SurveyPriority] = Query(None, description="Filter by priority level"),
     salesmen_id: Optional[int] = Query(None, description="Filter by assigned salesman"),

@@ -21,7 +21,7 @@ router = APIRouter(prefix="/packages", tags=["packages"])
 @router.get("", response_model=List[Package])
 async def read_packages(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 999999,
     category: Optional[str] = Query(None, description="Filter by category"),
     type: Optional[str] = Query(None, description="Filter by type"),
     min_cost: Optional[float] = Query(None, description="Filter by minimum cost per pax"),

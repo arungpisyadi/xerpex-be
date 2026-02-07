@@ -30,7 +30,7 @@ router = APIRouter(prefix="/invoices", tags=["invoices"])
 @router.get("", response_model=InvoiceListResponse)
 async def list_invoices(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    limit: int = Query(999999, ge=1, le=1000, description="Maximum number of records to return"),
     status: Optional[str] = Query(None, description="Filter by invoice status (comma-separated for multiple, e.g., 'pending,paid')"),
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
     search: Optional[str] = Query(None, description="Search by invoice number or customer name"),

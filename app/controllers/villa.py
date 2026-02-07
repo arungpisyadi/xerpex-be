@@ -27,7 +27,7 @@ router = APIRouter(prefix="/villas", tags=["villas"])
 @router.get("", response_model=List[Villa])
 async def read_villas(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 999999,
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     room_type: Optional[str] = Query(None, description="Filter by room type"),
     min_capacity: Optional[str] = Query(None, description="Filter by minimum capacity"),

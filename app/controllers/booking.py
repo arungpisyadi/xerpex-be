@@ -31,7 +31,7 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 @router.get("", response_model=BookingListResponse)
 async def list_bookings(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    limit: int = Query(999999, ge=1, le=1000, description="Maximum number of records to return"),
     status: Optional[str] = Query(None, description="Filter by booking status"),
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
     search: Optional[str] = Query(None, description="Search by booking code or customer name"),
