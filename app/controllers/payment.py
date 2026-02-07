@@ -25,7 +25,7 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 @router.get("", response_model=PaymentListResponse)
 async def list_payments(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(999999, ge=1, le=1000, description="Maximum number of records to return"),
+    limit: int = Query(999999, ge=1, le=999999, description="Maximum number of records to return"),
     invoice_id: Optional[int] = Query(None, description="Filter by invoice ID"),
     status: Optional[PaymentStatus] = Query(None, description="Filter by payment status"),
     payment_method: Optional[PaymentMethod] = Query(None, description="Filter by payment method"),

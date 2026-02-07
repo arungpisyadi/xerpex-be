@@ -34,7 +34,7 @@ router = APIRouter(prefix="/quotes", tags=["quotes"])
 @router.get("", response_model=QuoteListResponse)
 async def list_quotes(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(999999, ge=1, le=1000, description="Maximum number of records to return"),
+    limit: int = Query(999999, ge=1, le=999999, description="Maximum number of records to return"),
     status: Optional[QuoteStatus] = Query(None, description="Filter by quote status"),
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
     search: Optional[str] = Query(None, description="Search by quote number or customer name"),
