@@ -25,7 +25,7 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 @router.get("", response_model=CustomerListResponse)
 async def list_customers(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(999999, ge=1, le=1000, description="Maximum number of records to return"),
+    limit: int = Query(999999, ge=1, le=999999, description="Maximum number of records to return"),
     search: Optional[str] = Query(None, description="Search by name, email, phone, or address"),
     active_only: bool = Query(True, description="Filter only active customers"),
     db: Session = Depends(get_db),
