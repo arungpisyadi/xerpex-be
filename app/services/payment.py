@@ -834,17 +834,29 @@ def create_payment(db: Session, payment: PaymentCreate, created_by: int) -> Paym
     db.commit()
     db.refresh(db_payment)
     
-    # Update invoice amount_paid and amount_due
-    invoice.amount_paid = (invoice.amount_paid or Decimal('0.00')) + db_payment.amount
-    invoice.amount_due = invoice.total - invoice.amount_paid
+    # Calculate total paid from all payments for this invoice using SUM
+    # This ensures accurate calculation even if there are edge cases
+    total_paid_result = db.query(func.sum(Payment.amount)).filter(
+        Payment.invoice_id == payment.invoice_id
+    ).first()
     
-    # If invoice has a booking, also update the booking's payment fields
-    if invoice.booking_id:
+    # Handle case where total_paid_result might be None or (None,)
+    if total_paid_result and total_paid_result[0] is not None:
+        total_paid = total_paid_result[0]
+    else:
+        total_paid = Decimal('0.00')
+    
+    # Update invoice with calculated amount_paid
+    invoice.amount_paid = total_paid
+    invoice.amount_due = invoice.total - total_paid
+    
+    # Also update the linked booking if it exists
+    if invoice.booking_id is not None:
         from app.models.booking import Booking
         booking = db.query(Booking).filter(Booking.id == invoice.booking_id).first()
         if booking:
-            booking.amount_paid = (booking.amount_paid or Decimal('0.00')) + db_payment.amount
-            booking.amount_due = booking.total - booking.amount_paid
+            booking.amount_paid = total_paid
+            booking.amount_due = booking.total - total_paid
     
     # Update invoice status based on amount_paid comparison
     if invoice.amount_paid >= invoice.total:
@@ -1121,12 +1133,38 @@ def delete_payment(db: Session, payment_id: int, created_by: int) -> bool:
     # This ensures data integrity when a payment is deleted
     db.query(InvoiceHistory).filter(InvoiceHistory.payment_id == payment_id).delete()
     
+    invoice_id = db_payment.invoice_id
     invoice = db_payment.invoice
     db.delete(db_payment)
     db.commit()
     
-    # Update invoice payment status
-    _update_invoice_payment_status(db, invoice)
+    # Recalculate amount_paid from remaining payments using SUM
+    total_paid_result = db.query(func.sum(Payment.amount)).filter(
+        Payment.invoice_id == invoice_id
+    ).first()
+    total_paid = total_paid_result[0] or Decimal('0.00')
+    
+    # Update invoice with recalculated amount_paid
+    invoice.amount_paid = total_paid
+    invoice.amount_due = invoice.total - total_paid
+    
+    # Also update the linked booking if it exists
+    if invoice.booking_id is not None:
+        from app.models.booking import Booking
+        booking = db.query(Booking).filter(Booking.id == invoice.booking_id).first()
+        if booking:
+            booking.amount_paid = total_paid
+            booking.amount_due = booking.total - total_paid
+    
+    # Update invoice status based on total_paid
+    if total_paid >= invoice.total:
+        invoice.status = InvoiceStatus.paid.value
+    elif total_paid > Decimal('0.00'):
+        invoice.status = InvoiceStatus.partially_paid.value
+    else:
+        invoice.status = InvoiceStatus.draft.value
+    
+    db.commit()
     
     return True
 
@@ -1384,6 +1422,11 @@ def convert_invoice_to_booking(
         )
     
     db.commit()
+    
+    # Update the invoice with the new booking_id
+    invoice.booking_id = db_booking.id
+    db.commit()
+    
     db.refresh(db_booking)
     
     # Log invoice history event
