@@ -300,6 +300,67 @@ def create_invoice(db: Session, invoice: InvoiceCreate, current_user: User) -> I
     return db_invoice
 
 
+def recalculate_invoice_totals(db: Session, invoice_id: int, user_id: int) -> Invoice:
+    """
+    Recalculate invoice totals from items and sync to booking if linked.
+    
+    Args:
+        db: Database session
+        invoice_id: Invoice ID to recalculate
+        user_id: Current user ID for isolation
+        
+    Returns:
+        Invoice: Updated invoice with recalculated totals
+        
+    Raises:
+        HTTPException: If invoice not found
+    """
+    from app.models.booking import Booking
+    
+    # Get actual user from database to preserve role information
+    from app.models.user import User
+    actual_user = db.query(User).filter(User.id == user_id).first()
+    if not actual_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    db_invoice = get_invoice(db, invoice_id, actual_user)
+    if not db_invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice not found"
+        )
+    
+    # Calculate items total
+    items_total = sum(item.line_total for item in db_invoice.items)
+    
+    # Calculate villas total
+    villas_total = sum(
+        invoice_villa.villa.base_price 
+        for invoice_villa in db_invoice.villas 
+        if invoice_villa.villa
+    )
+    
+    # Update invoice total
+    db_invoice.total = items_total + villas_total
+    db_invoice.amount_due = db_invoice.total - db_invoice.amount_paid
+    
+    # Also update the linked booking if it exists
+    if db_invoice.booking_id is not None:
+        booking = db.query(Booking).filter(Booking.id == db_invoice.booking_id).first()
+        if booking:
+            booking.total = db_invoice.total
+            booking.amount_due = booking.total - booking.amount_paid
+    
+    db_invoice.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_invoice)
+    
+    return db_invoice
+
+
 def update_invoice(
     db: Session,
     invoice_id: int,
@@ -339,6 +400,10 @@ def update_invoice(
     
     # Status validation removed - users with appropriate roles (admin, manager, finance, sales)
     # can now edit invoices with any status
+    
+    # Track if items or villas are being changed
+    items_being_updated = invoice_update.items is not None
+    villas_being_updated = invoice_update.villas is not None
     
     # Update invoice fields (exclude items and villas as they're handled separately)
     update_data = invoice_update.dict(exclude_unset=True, exclude={'items', 'villas'})
@@ -448,6 +513,17 @@ def update_invoice(
         
         # Update total
         db_invoice.total = items_total + villas_total
+    
+    # Update amount_due based on current amount_paid
+    db_invoice.amount_due = db_invoice.total - db_invoice.amount_paid
+    
+    # Also update the linked booking if it exists
+    if db_invoice.booking_id is not None:
+        from app.models.booking import Booking
+        booking = db.query(Booking).filter(Booking.id == db_invoice.booking_id).first()
+        if booking:
+            booking.total = db_invoice.total
+            booking.amount_due = booking.total - booking.amount_paid
     
     db_invoice.updated_at = datetime.utcnow()
     db.commit()
@@ -916,7 +992,7 @@ def update_payment(
     created_by: int
 ) -> Payment:
     """
-    Update a payment
+    Update a payment and sync amount_paid to invoice and booking
     
     Args:
         db: Database session
@@ -953,6 +1029,11 @@ def update_payment(
             detail="Cannot modify completed payment"
         )
     
+    # Track if amount is being changed
+    old_amount = db_payment.amount
+    new_amount = payment_update.amount
+    amount_changed = new_amount is not None and old_amount != new_amount
+    
     # Update payment fields
     update_data = payment_update.dict(exclude_unset=True)
     
@@ -967,6 +1048,59 @@ def update_payment(
     db_payment.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_payment)
+    
+    # If amount was changed, recalculate amount_paid for invoice and booking
+    if amount_changed:
+        invoice = db_payment.invoice
+        if invoice:
+            # Calculate total paid from all payments for this invoice using SUM
+            total_paid_result = db.query(func.sum(Payment.amount)).filter(
+                Payment.invoice_id == invoice.id
+            ).first()
+            
+            # Handle case where total_paid_result might be None or (None,)
+            if total_paid_result and total_paid_result[0] is not None:
+                total_paid = total_paid_result[0]
+            else:
+                total_paid = Decimal('0.00')
+            
+            # Update invoice with calculated amount_paid
+            invoice.amount_paid = total_paid
+            invoice.amount_due = invoice.total - total_paid
+            
+            # Also update the linked booking if it exists
+            if invoice.booking_id is not None:
+                from app.models.booking import Booking
+                booking = db.query(Booking).filter(Booking.id == invoice.booking_id).first()
+                if booking:
+                    booking.amount_paid = total_paid
+                    booking.amount_due = booking.total - total_paid
+            
+            # Update invoice status based on amount_paid comparison
+            if invoice.amount_paid >= invoice.total:
+                invoice.status = InvoiceStatus.paid.value
+            elif invoice.amount_paid > Decimal('0.00'):
+                invoice.status = InvoiceStatus.partially_paid.value
+            # If amount_paid is 0, keep current status (don't change)
+            
+            db.commit()
+            
+            # Log history event for payment amount change
+            safe_log_invoice_history(
+                db=db,
+                invoice_id=invoice.id,
+                user_id=created_by,
+                event_type="payment_amount_updated",
+                event_category="payment",
+                description=f"Payment amount changed from ${old_amount} to ${new_amount}",
+                metadata={
+                    "payment_id": db_payment.id,
+                    "old_amount": str(old_amount),
+                    "new_amount": str(new_amount),
+                    "total_paid_after_update": str(total_paid)
+                },
+                payment_id=db_payment.id
+            )
     
     # Log payment history event
     if changed_fields:

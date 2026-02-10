@@ -19,9 +19,9 @@ from app.models.package import Package
 from app.models.villa import Villa
 from app.models.payment import Invoice, InvoiceItem, InvoiceVilla, Payment
 from app.models.booking import Booking, BookingItem, BookingVilla
-from app.schemas.payment import PaymentCreate, PaymentMethod, PaymentType, PaymentStatus, InvoiceStatus
+from app.schemas.payment import PaymentCreate, PaymentUpdate, PaymentMethod, PaymentType, PaymentStatus, InvoiceStatus
 from app.schemas.payment import InvoiceToBookingRequest
-from app.services.payment import create_payment, delete_payment, convert_invoice_to_booking
+from app.services.payment import create_payment, delete_payment, update_payment, convert_invoice_to_booking
 
 
 # ============================================================================
@@ -858,3 +858,331 @@ class TestPaymentSyncEdgeCases:
         expected_total = sum(payments)
         assert invoice.amount_paid == expected_total
         assert invoice.amount_due == Decimal("10000.00") - expected_total
+
+
+# ============================================================================
+# Test: Payment update recalculates amount_paid
+# ============================================================================
+
+class TestPaymentUpdateRecalculation:
+    """Test that payment update recalculates amount_paid correctly"""
+    
+    def test_update_payment_amount_recalculates_invoice_amount_paid(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer
+    ):
+        """Test that updating payment amount recalculates invoice amount_paid"""
+        # Create an invoice directly
+        invoice = Invoice(
+            user_id=admin_user.id,
+            customer_id=test_customer.id,
+            invoice_number=f"INV-UPDATE-{datetime.utcnow().timestamp()}",
+            issue_date=date.today(),
+            due_date=date.today() + timedelta(days=30),
+            status="draft",
+            total=Decimal("1000.00"),
+            amount_paid=Decimal("0.00"),
+            amount_due=Decimal("1000.00"),
+            tax_total=Decimal("0.00")
+        )
+        db.add(invoice)
+        db.commit()
+        db.refresh(invoice)
+        
+        # Create a payment
+        payment_data = PaymentCreate(
+            invoice_id=invoice.id,
+            amount=Decimal("300.00"),
+            payment_method=PaymentMethod.bank_transfer,
+            payment_type=PaymentType.down_payment,
+            payment_date=date.today(),
+            reference_number="PAY-UPDATE-001",
+            status=PaymentStatus.completed
+        )
+        payment = create_payment(db, payment_data, admin_user.id)
+        
+        db.refresh(invoice)
+        assert invoice.amount_paid == Decimal("300.00")
+        
+        # Update the payment amount
+        payment_update = PaymentUpdate(amount=Decimal("500.00"))
+        updated_payment = update_payment(db, payment.id, payment_update, admin_user.id)
+        
+        # Verify payment was updated
+        assert updated_payment.amount == Decimal("500.00")
+        
+        # Verify invoice amount_paid was recalculated
+        db.refresh(invoice)
+        assert invoice.amount_paid == Decimal("500.00")
+        assert invoice.amount_due == Decimal("500.00")
+    
+    def test_update_payment_amount_with_multiple_payments(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer
+    ):
+        """Test that updating one payment amount recalculates correctly with multiple payments"""
+        # Create an invoice
+        invoice = Invoice(
+            user_id=admin_user.id,
+            customer_id=test_customer.id,
+            invoice_number=f"INV-UPDATE-MULTI-{datetime.utcnow().timestamp()}",
+            issue_date=date.today(),
+            due_date=date.today() + timedelta(days=30),
+            status="draft",
+            total=Decimal("1000.00"),
+            amount_paid=Decimal("0.00"),
+            amount_due=Decimal("1000.00"),
+            tax_total=Decimal("0.00")
+        )
+        db.add(invoice)
+        db.commit()
+        db.refresh(invoice)
+        
+        # Create multiple payments
+        payment1_data = PaymentCreate(
+            invoice_id=invoice.id,
+            amount=Decimal("300.00"),
+            payment_method=PaymentMethod.bank_transfer,
+            payment_type=PaymentType.down_payment,
+            payment_date=date.today(),
+            reference_number="PAY-UPD-MULTI-001",
+            status=PaymentStatus.completed
+        )
+        payment1 = create_payment(db, payment1_data, admin_user.id)
+        
+        payment2_data = PaymentCreate(
+            invoice_id=invoice.id,
+            amount=Decimal("400.00"),
+            payment_method=PaymentMethod.cash,
+            payment_type=PaymentType.installment,
+            payment_date=date.today(),
+            reference_number="PAY-UPD-MULTI-002",
+            status=PaymentStatus.completed
+        )
+        payment2 = create_payment(db, payment2_data, admin_user.id)
+        
+        db.refresh(invoice)
+        # Total: 300 + 400 = 700
+        assert invoice.amount_paid == Decimal("700.00")
+        
+        # Update payment1 from 300 to 500
+        payment_update = PaymentUpdate(amount=Decimal("500.00"))
+        update_payment(db, payment1.id, payment_update, admin_user.id)
+        
+        # New total: 500 + 400 = 900
+        db.refresh(invoice)
+        assert invoice.amount_paid == Decimal("900.00")
+        assert invoice.amount_due == Decimal("100.00")
+        assert invoice.status == InvoiceStatus.partially_paid.value
+    
+    def test_update_payment_amount_to_full_payment(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer
+    ):
+        """Test that updating payment to full amount marks invoice as paid"""
+        # Create an invoice
+        invoice = Invoice(
+            user_id=admin_user.id,
+            customer_id=test_customer.id,
+            invoice_number=f"INV-UPDATE-FULL-{datetime.utcnow().timestamp()}",
+            issue_date=date.today(),
+            due_date=date.today() + timedelta(days=30),
+            status="draft",
+            total=Decimal("1000.00"),
+            amount_paid=Decimal("0.00"),
+            amount_due=Decimal("1000.00"),
+            tax_total=Decimal("0.00")
+        )
+        db.add(invoice)
+        db.commit()
+        db.refresh(invoice)
+        
+        # Create a partial payment
+        payment_data = PaymentCreate(
+            invoice_id=invoice.id,
+            amount=Decimal("600.00"),
+            payment_method=PaymentMethod.bank_transfer,
+            payment_type=PaymentType.down_payment,
+            payment_date=date.today(),
+            reference_number="PAY-UPDATE-FULL-001",
+            status=PaymentStatus.completed
+        )
+        payment = create_payment(db, payment_data, admin_user.id)
+        
+        db.refresh(invoice)
+        assert invoice.amount_paid == Decimal("600.00")
+        assert invoice.status == InvoiceStatus.partially_paid.value
+        
+        # Update payment to full amount
+        payment_update = PaymentUpdate(amount=Decimal("1000.00"))
+        update_payment(db, payment.id, payment_update, admin_user.id)
+        
+        db.refresh(invoice)
+        assert invoice.amount_paid == Decimal("1000.00")
+        assert invoice.amount_due == Decimal("0.00")
+        assert invoice.status == InvoiceStatus.paid.value
+    
+    def test_update_payment_amount_updates_booking_amount_paid(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer,
+        test_package: Package,
+        test_villa: Villa
+    ):
+        """Test that updating payment amount syncs to linked booking"""
+        # Create a partially_paid invoice
+        invoice = create_test_invoice(
+            db, admin_user, test_customer, test_package, test_villa,
+            status="partially_paid",
+            amount_paid=Decimal("1000000.00")
+        )
+        
+        # Convert to booking
+        request_data = InvoiceToBookingRequest(
+            invoice_id=invoice.id,
+            check_in=date.today() + timedelta(days=5),
+            check_out=date.today() + timedelta(days=8),
+            total_pax=4,
+            notes="Converted for payment update sync test"
+        )
+        
+        result = convert_invoice_to_booking(
+            db=db,
+            invoice_id=invoice.id,
+            request_data=request_data,
+            current_user=admin_user
+        )
+        
+        booking = db.query(Booking).filter(Booking.id == result["booking_id"]).first()
+        assert booking.amount_paid == Decimal("1000000.00")
+        
+        # Add another payment
+        new_payment_data = PaymentCreate(
+            invoice_id=invoice.id,
+            amount=Decimal("500000.00"),
+            payment_method=PaymentMethod.bank_transfer,
+            payment_type=PaymentType.installment,
+            payment_date=date.today(),
+            reference_number="PAY-UPDATE-BOOKING-001",
+            status=PaymentStatus.completed
+        )
+        new_payment = create_payment(db, new_payment_data, admin_user.id)
+        
+        db.refresh(booking)
+        # Total: 1000000 + 500000 = 1500000
+        assert booking.amount_paid == Decimal("1500000.00")
+        
+        # Update the new payment amount
+        payment_update = PaymentUpdate(amount=Decimal("1000000.00"))
+        update_payment(db, new_payment.id, payment_update, admin_user.id)
+        
+        # New total: 1000000 + 1000000 = 2000000
+        db.refresh(booking)
+        assert booking.amount_paid == Decimal("2000000.00")
+        assert booking.amount_due == Decimal("3000000.00")
+    
+    def test_update_payment_non_amount_fields_no_recalculation(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer
+    ):
+        """Test that updating non-amount fields doesn't trigger recalculation"""
+        # Create an invoice
+        invoice = Invoice(
+            user_id=admin_user.id,
+            customer_id=test_customer.id,
+            invoice_number=f"INV-UPDATE-NOAMT-{datetime.utcnow().timestamp()}",
+            issue_date=date.today(),
+            due_date=date.today() + timedelta(days=30),
+            status="draft",
+            total=Decimal("1000.00"),
+            amount_paid=Decimal("0.00"),
+            amount_due=Decimal("1000.00"),
+            tax_total=Decimal("0.00")
+        )
+        db.add(invoice)
+        db.commit()
+        db.refresh(invoice)
+        
+        # Create a payment
+        payment_data = PaymentCreate(
+            invoice_id=invoice.id,
+            amount=Decimal("500.00"),
+            payment_method=PaymentMethod.bank_transfer,
+            payment_type=PaymentType.down_payment,
+            payment_date=date.today(),
+            reference_number="PAY-UPDATE-NOAMT-001",
+            status=PaymentStatus.completed
+        )
+        payment = create_payment(db, payment_data, admin_user.id)
+        
+        db.refresh(invoice)
+        initial_amount_paid = invoice.amount_paid
+        
+        # Update payment notes only
+        payment_update = PaymentUpdate(notes="Updated payment notes")
+        updated_payment = update_payment(db, payment.id, payment_update, admin_user.id)
+        
+        # Verify payment was updated
+        assert updated_payment.notes == "Updated payment notes"
+        
+        # Verify invoice amount_paid is unchanged
+        db.refresh(invoice)
+        assert invoice.amount_paid == initial_amount_paid
+    
+    def test_update_payment_reduces_amount_updates_status(
+        self,
+        db: Session,
+        admin_user: User,
+        test_customer: Customer
+    ):
+        """Test that reducing payment amount updates invoice status from paid to partially_paid"""
+        # Create an invoice
+        invoice = Invoice(
+            user_id=admin_user.id,
+            customer_id=test_customer.id,
+            invoice_number=f"INV-UPDATE-REDUCE-{datetime.utcnow().timestamp()}",
+            issue_date=date.today(),
+            due_date=date.today() + timedelta(days=30),
+            status="draft",
+            total=Decimal("1000.00"),
+            amount_paid=Decimal("0.00"),
+            amount_due=Decimal("1000.00"),
+            tax_total=Decimal("0.00")
+        )
+        db.add(invoice)
+        db.commit()
+        db.refresh(invoice)
+        
+        # Create a full payment
+        payment_data = PaymentCreate(
+            invoice_id=invoice.id,
+            amount=Decimal("1000.00"),
+            payment_method=PaymentMethod.bank_transfer,
+            payment_type=PaymentType.paid_off,
+            payment_date=date.today(),
+            reference_number="PAY-UPDATE-REDUCE-001",
+            status=PaymentStatus.completed
+        )
+        payment = create_payment(db, payment_data, admin_user.id)
+        
+        db.refresh(invoice)
+        assert invoice.amount_paid == Decimal("1000.00")
+        assert invoice.status == InvoiceStatus.paid.value
+        
+        # Reduce payment amount
+        payment_update = PaymentUpdate(amount=Decimal("500.00"))
+        update_payment(db, payment.id, payment_update, admin_user.id)
+        
+        db.refresh(invoice)
+        assert invoice.amount_paid == Decimal("500.00")
+        assert invoice.amount_due == Decimal("500.00")
+        assert invoice.status == InvoiceStatus.partially_paid.value
