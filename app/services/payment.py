@@ -1049,6 +1049,10 @@ def update_payment(
     db.commit()
     db.refresh(db_payment)
     
+    # Re-load relationships after refresh to ensure they're available for response serialization
+    # This fixes issues where relationships become detached after commit/refresh
+    db_payment = get_payment(db, payment_id, actual_user)
+    
     # If amount was changed, recalculate amount_paid for invoice and booking
     if amount_changed:
         invoice = db_payment.invoice
@@ -1114,6 +1118,11 @@ def update_payment(
             metadata={"changed_fields": changed_fields}
         )
     
+    # Re-load payment one final time after ALL commits to ensure all relationships
+    # and scalar fields are available for response serialization
+    # This is critical because the db.commit() in amount_changed block can detach the object
+    db_payment = get_payment(db, payment_id, actual_user)
+    
     return db_payment
 
 
@@ -1159,6 +1168,15 @@ def update_payment_status(
     db_payment.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_payment)
+    
+    # Re-load relationships after refresh to ensure they're available for response serialization
+    # This fixes issues where relationships become detached after commit/refresh
+    db_payment = db.query(Payment).options(
+        joinedload(Payment.creator),
+        joinedload(Payment.booking),
+        joinedload(Payment.invoice).joinedload(Invoice.customer),
+        joinedload(Payment.payment_history)
+    ).filter(Payment.id == payment_id).first()
     
     # Log history event for payment status change
     event_type = "payment_status_changed"

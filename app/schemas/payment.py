@@ -417,6 +417,8 @@ class PaymentUpdate(BaseModel):
     payment_date: Optional[date] = None
     reference_number: Optional[str] = None
     notes: Optional[str] = None
+    payment_type: Optional[PaymentType] = None
+    status: Optional[PaymentStatus] = None
 
 
 class PaymentStatusUpdate(BaseModel):
