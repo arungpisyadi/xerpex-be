@@ -231,22 +231,25 @@ class InvoiceItemResponse(InvoiceItemBase):
     id: int
     invoice_id: int
     package_name: Optional[str] = None
+    description: Optional[str] = None
     created_at: datetime
 
     @root_validator(pre=True)
     def extract_package_name(cls, values):
-        """Extract package name from the package relationship"""
-        # If values is a SQLAlchemy model object, extract the package name
+        """Extract package name and description from the package relationship"""
+        # If values is a SQLAlchemy model object, extract the package name and description
         if hasattr(values, 'package') and values.package and hasattr(values.package, 'name'):
-            # Create a dict from the object and add the package_name
+            # Create a dict from the object and add the package_name and description
             if hasattr(values, '__dict__'):
                 result = {k: v for k, v in values.__dict__.items() if not k.startswith('_')}
                 result['package_name'] = values.package.name
+                result['description'] = values.package.description if hasattr(values.package, 'description') else None
                 return result
         # If values is already a dict, check if it has a package key
         elif isinstance(values, dict) and 'package' in values:
             if values['package'] and hasattr(values['package'], 'name'):
                 values['package_name'] = values['package'].name
+                values['description'] = values['package'].description if hasattr(values['package'], 'description') else None
         return values
 
     class Config:
