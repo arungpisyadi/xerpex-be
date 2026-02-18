@@ -11,11 +11,12 @@ from app.database import get_db
 from app.schemas.report import (
     ReportVillaOccupancyParams, ReportBookingStatusParams, ReportRevenueParams,
     VillaOccupancyReport, BookingStatusReport, RevenueReport,
-    TopVillasReport, DashboardSummary
+    TopVillasReport, DashboardSummary, SalesReportParams, SalesReport
 )
 from app.services.report import (
     get_villa_occupancy_report, get_booking_status_report,
-    get_revenue_report, get_top_villas_report, get_dashboard_summary
+    get_revenue_report, get_top_villas_report, get_dashboard_summary,
+    get_sales_report
 )
 from app.utils.security import get_current_active_user, get_current_admin_user
 
@@ -86,3 +87,19 @@ def read_top_villas_report(
     Get top villas report
     """
     return get_top_villas_report(db, start_date, end_date, limit)
+
+
+@router.post("/sales", response_model=SalesReport)
+def read_sales_report(
+    params: SalesReportParams,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
+    """
+    Get sales report
+    
+    Returns a list of bookings within the date range with optional filters:
+    - sales_person_ids: Filter by sales person IDs
+    - payment_status: Filter by payment status (paid, partially_paid, pending, overdue)
+    """
+    return get_sales_report(db, params)

@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ReportDateRangeParams(BaseModel):
@@ -113,3 +113,53 @@ class DashboardSummary(BaseModel):
     top_villas: List[Dict[str, Any]]
     recent_bookings: List[Dict[str, Any]]
     revenue_chart: List[Dict[str, Any]]
+
+
+# =====================================================
+# Sales Report Schemas
+# =====================================================
+
+
+class SalesReportParams(BaseModel):
+    """Sales report input parameters"""
+    start_date: date
+    end_date: date
+    sales_person_ids: Optional[List[int]] = None
+    payment_status: Optional[str] = None
+
+    @field_validator('sales_person_ids', mode='before')
+    @classmethod
+    def validate_sales_person_ids(cls, v):
+        """Handle null or empty list values"""
+        if v is None or v == []:
+            return None
+        # Filter out any None values in the list
+        if isinstance(v, list):
+            return [item for item in v if item is not None]
+        return v
+
+
+class SalesReportItem(BaseModel):
+    """Individual sales report row data"""
+    invoice_id: int
+    invoice_number: str
+    booking_id: Optional[int] = None
+    booking_code: Optional[str] = None
+    customer_name: str
+    sales_person_name: Optional[str]
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
+    total: Decimal
+    amount_paid: Decimal
+    amount_due: Decimal
+    payment_status: str
+
+
+class SalesReport(BaseModel):
+    """Full sales report response"""
+    start_date: date
+    end_date: date
+    items: List[SalesReportItem]
+    total_sales_amount: Decimal
+    total_paid_amount: Decimal
+    total_difference: Decimal

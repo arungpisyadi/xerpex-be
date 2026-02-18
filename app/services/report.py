@@ -11,10 +11,11 @@ from sqlalchemy import func, and_, or_, extract, case, literal
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.booking import Booking, BookingVilla
-from app.models.payment import Payment
+from app.models.payment import Payment, Invoice
 from app.models.villa import Villa, VillaAvailability
 from app.schemas.report import (
-    ReportVillaOccupancyParams, ReportBookingStatusParams, ReportRevenueParams
+    ReportVillaOccupancyParams, ReportBookingStatusParams, ReportRevenueParams,
+    SalesReportParams
 )
 def get_villa_occupancy_report(db: Session, params: ReportVillaOccupancyParams) -> Dict[str, Any]:
     """
@@ -547,6 +548,154 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
         "top_villas": top_villas_data["villas"],
         "recent_bookings": recent_bookings_data,
         "revenue_chart": revenue_chart_data
+    }
+    
+    return result
+
+
+def _get_payment_status(amount_paid: Decimal, amount_due: Decimal, due_date: Optional[date]) -> str:
+    """
+    Determine payment status based on amount paid, amount due, and due date.
+    
+    Args:
+        amount_paid: Amount already paid
+        amount_due: Amount still due
+        due_date: Due date for payment (optional)
+    
+    Returns:
+        str: Payment status string
+    """
+    if amount_due <= 0:
+        return "paid"
+    elif amount_paid > 0 and amount_due > 0:
+        return "partially_paid"
+    elif amount_paid == 0:
+        # Check if overdue
+        if due_date and due_date < date.today():
+            return "overdue"
+        return "pending"
+    else:
+        return "pending"
+
+
+def get_sales_report(db: Session, params: SalesReportParams) -> Dict[str, Any]:
+    """
+    Generate sales report from invoices
+    
+    Args:
+        db: Database session
+        params: Report parameters
+    
+    Returns:
+        Dict[str, Any]: Sales report data
+    """
+    from app.models.user import User
+    
+    # Build query for invoices within date range (using issue_date)
+    invoice_query = db.query(Invoice).filter(
+        Invoice.issue_date >= params.start_date,
+        Invoice.issue_date <= params.end_date
+    )
+    
+    # Filter by sales person IDs if provided
+    if params.sales_person_ids:
+        invoice_query = invoice_query.filter(
+            Invoice.sales_person_id.in_(params.sales_person_ids)
+        )
+    
+    # Get all invoices
+    invoices = invoice_query.all()
+    
+    # Process each invoice and calculate payment status
+    items = []
+    total_sales_amount = Decimal('0.00')
+    total_paid_amount = Decimal('0.00')
+    
+    today = date.today()
+    
+    # Get booking IDs that need to be looked up
+    invoice_booking_ids = []
+    for invoice in invoices:
+        bid = invoice.booking_id
+        if bid is not None:
+            invoice_booking_ids.append(bid)
+    
+    # Build a lookup dict for bookings
+    booking_lookup = {}
+    if invoice_booking_ids:
+        from app.models.booking import Booking
+        booking_records = db.query(Booking.id, Booking.booking_code).filter(
+            Booking.id.in_(invoice_booking_ids)
+        ).all()
+        booking_lookup = {b.id: b.booking_code for b in booking_records}
+    
+    for invoice in invoices:
+        # Determine payment status
+        # Use invoice's due_date for overdue check
+        # Get due_date value - need to handle SQLAlchemy Column type for type checker
+        payment_status = _get_payment_status(
+            Decimal(str(invoice.amount_paid)),
+            Decimal(str(invoice.amount_due)),
+            invoice.due_date if invoice.due_date is not None else None  # type: ignore[arg-type]
+        )
+        
+        # Filter by payment status if provided
+        if params.payment_status and payment_status != params.payment_status:
+            continue
+        
+        # Get customer name
+        customer_name = invoice.customer.name if invoice.customer else "N/A"
+        
+        # Get sales person name
+        sales_person_name = None
+        if invoice.sales_person:
+            sales_person_name = invoice.sales_person.full_name
+        
+        # Get booking info if invoice has a booking
+        booking_id = invoice.booking_id
+        booking_code = None
+        if booking_id is not None:
+            booking_code = booking_lookup.get(booking_id) 
+        # we only have the booking_id foreign key
+        
+        # Use invoice's check_in/check_out if available, otherwise None
+        check_in = invoice.check_in
+        check_out = invoice.check_out
+        
+        # Create item
+        item = {
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "booking_id": booking_id,
+            "booking_code": booking_code,
+            "customer_name": customer_name,
+            "sales_person_name": sales_person_name,
+            "check_in": check_in,
+            "check_out": check_out,
+            "total": invoice.total,
+            "amount_paid": invoice.amount_paid,
+            "amount_due": invoice.amount_due,
+            "payment_status": payment_status
+        }
+        
+        items.append(item)
+        total_sales_amount += invoice.total
+        total_paid_amount += invoice.amount_paid
+    
+    # Calculate difference
+    total_difference = total_sales_amount - total_paid_amount
+    
+    # Sort items by issue_date descending
+    items.sort(key=lambda x: x.get("invoice_id"), reverse=True)
+    
+    # Create result
+    result = {
+        "start_date": params.start_date,
+        "end_date": params.end_date,
+        "items": items,
+        "total_sales_amount": total_sales_amount,
+        "total_paid_amount": total_paid_amount,
+        "total_difference": total_difference
     }
     
     return result
