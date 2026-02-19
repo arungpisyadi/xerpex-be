@@ -591,10 +591,17 @@ def get_sales_report(db: Session, params: SalesReportParams) -> Dict[str, Any]:
     """
     from app.models.user import User
     
-    # Build query for invoices within date range (using issue_date)
+    # Build query for invoices within date range (using check_in date)
+    # Filter invoices where check_in falls within the date range OR check_in is null (standalone invoices)
     invoice_query = db.query(Invoice).filter(
-        Invoice.issue_date >= params.start_date,
-        Invoice.issue_date <= params.end_date
+        or_(
+            and_(
+                Invoice.check_in.isnot(None),
+                Invoice.check_in >= params.start_date,
+                Invoice.check_in <= params.end_date
+            ),
+            Invoice.check_in.is_(None)
+        )
     )
     
     # Filter by sales person IDs if provided
