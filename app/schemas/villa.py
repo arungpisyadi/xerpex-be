@@ -83,6 +83,14 @@ class AvailabilityCheck(BaseModel):
     check_in: date
     check_out: date
 
+    @model_validator(mode='after')
+    def validate_dates(self):
+        """Validate that check_out is on or after check_in"""
+        if self.check_out < self.check_in:
+            raise ValueError('Check-out date must be on or after check-in date')
+        return self
+
+
 class AvailableVillasRequest(BaseModel):
     """Schema for available villas query parameters"""
     check_in: date = Field(..., description="Check-in date", example="2024-01-15")
@@ -92,9 +100,9 @@ class AvailableVillasRequest(BaseModel):
     
     @model_validator(mode='after')
     def validate_dates(self):
-        """Validate that check_out is after check_in"""
-        if self.check_out <= self.check_in:
-            raise ValueError('check_out must be after check_in')
+        """Validate that check_out is on or after check_in"""
+        if self.check_out < self.check_in:
+            raise ValueError('Check-out date must be on or after check-in date')
         return self
 
 

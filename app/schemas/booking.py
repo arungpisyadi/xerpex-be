@@ -7,7 +7,7 @@ from datetime import datetime, date
 from typing import Optional, List, Literal, Dict, Any
 from decimal import Decimal
 from enum import Enum
-from pydantic import BaseModel, EmailStr, condecimal, Field, field_validator
+from pydantic import BaseModel, EmailStr, condecimal, Field, field_validator, model_validator
 
 from app.utils.helpers import sanitize_phone_number
 from app.schemas.customer import Customer
@@ -203,11 +203,18 @@ class BookingBase(BaseModel):
     notes: Optional[str] = None
     sales_person_id: Optional[int] = None
 
+    @model_validator(mode='after')
+    def validate_dates(self):
+        """Validate that check_out is on or after check_in"""
+        if self.check_out < self.check_in:
+            raise ValueError('Check-out date must be on or after check-in date')
+        return self
+
     @field_validator('check_out')
     @classmethod
     def validate_check_out(cls, v, info):
         if 'check_in' in info.data and v < info.data['check_in']:
-            raise ValueError('check_out must be on or after check_in')
+            raise ValueError('Check-out date must be on or after check-in date')
         return v
 
     @field_validator('total_pax')
@@ -243,12 +250,20 @@ class BookingUpdate(BaseModel):
     sales_person_id: Optional[int] = None
     items: Optional[List[BookingItemCreate]] = None
 
+    @model_validator(mode='after')
+    def validate_dates(self):
+        """Validate that check_out is on or after check_in"""
+        if self.check_out is not None and self.check_in is not None:
+            if self.check_out < self.check_in:
+                raise ValueError('Check-out date must be on or after check-in date')
+        return self
+
     @field_validator('check_out')
     @classmethod
     def validate_check_out(cls, v, info):
         if v is not None and 'check_in' in info.data and info.data['check_in'] is not None:
             if v < info.data['check_in']:
-                raise ValueError('check_out must be on or after check_in')
+                raise ValueError('Check-out date must be on or after check-in date')
         return v
 
     @field_validator('total_pax')
