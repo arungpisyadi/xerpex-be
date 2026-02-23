@@ -617,9 +617,9 @@ class InvoiceToBookingRequest(BaseModel):
     
     @validator('check_out')
     def validate_check_out(cls, v, values):
-        """Validate that check_out is after check_in"""
-        if 'check_in' in values and v <= values['check_in']:
-            raise ValueError('Check-out date must be after check-in date')
+        """Validate that check_out is on or after check_in"""
+        if 'check_in' in values and v < values['check_in']:
+            raise ValueError('Check-out date must be on or after check-in date')
         return v
 
 
