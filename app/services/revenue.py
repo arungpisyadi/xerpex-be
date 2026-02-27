@@ -56,10 +56,10 @@ class RevenueService:
         try:
             # Build base query for all invoices
             query = self.db.query(
-                func.extract('month', Invoice.issue_date).label('month'),
+                func.extract('month', Invoice.check_in).label('month'),
                 func.sum(Invoice.total).label('revenue')
             ).filter(
-                func.extract('year', Invoice.issue_date) == year
+                func.extract('year', Invoice.check_in) == year
             )
             
             # Apply user filtering if needed (user_id = 0 means admin/finance sees all)
@@ -67,7 +67,7 @@ class RevenueService:
                 query = query.filter(Invoice.sales_person_id == user_id)
             
             # Group by month and execute query
-            query = query.group_by(func.extract('month', Invoice.issue_date))
+            query = query.group_by(func.extract('month', Invoice.check_in))
             results = query.all()
             
             # Convert results to dictionary for easy lookup
@@ -250,8 +250,8 @@ class RevenueService:
             # Get current month revenue (all invoices)
             current_revenue_query = self.db.query(func.sum(Invoice.total)).filter(
                 and_(
-                    func.extract('month', Invoice.issue_date) == current_month,
-                    func.extract('year', Invoice.issue_date) == current_year
+                    func.extract('month', Invoice.check_in) == current_month,
+                    func.extract('year', Invoice.check_in) == current_year
                 )
             )
             
@@ -263,7 +263,7 @@ class RevenueService:
             
             # Get today's revenue (new invoices issued today, regardless of payment status)
             today_revenue_query = self.db.query(func.sum(Invoice.total)).filter(
-                func.date(Invoice.issue_date) == today_jakarta
+                func.date(Invoice.check_in) == today_jakarta
             )
             
             # Apply user filtering for today's revenue
@@ -276,8 +276,8 @@ class RevenueService:
             previous_year = current_year - 1
             previous_month_query = self.db.query(func.sum(Invoice.total)).filter(
                 and_(
-                    func.extract('month', Invoice.issue_date) == current_month,
-                    func.extract('year', Invoice.issue_date) == previous_year
+                    func.extract('month', Invoice.check_in) == current_month,
+                    func.extract('year', Invoice.check_in) == previous_year
                 )
             )
             

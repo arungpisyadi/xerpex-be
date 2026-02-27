@@ -347,8 +347,8 @@ class KPIService:
         ).filter(
             and_(
                 Invoice.sales_person_id.isnot(None),
-                Invoice.created_at >= start_current_utc,
-                Invoice.created_at < end_current_utc
+                Invoice.check_in >= start_current_utc,
+                Invoice.check_in < end_current_utc
             )
         )
         
