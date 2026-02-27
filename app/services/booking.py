@@ -1619,8 +1619,8 @@ def validate_booking_dates(
     error_messages = []
     
     # Check if dates are valid
-    if check_out <= check_in:
-        error_messages.append("Check-out date must be after check-in date")
+    if check_out < check_in:
+        error_messages.append("Check-out date must be on or after check-in date")
     
     # Check if check-in is in the past
     if check_in < date.today():

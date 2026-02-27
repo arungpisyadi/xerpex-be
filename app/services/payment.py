@@ -1499,10 +1499,10 @@ def convert_invoice_to_booking(
         )
     
     # Validate dates
-    if request_data.check_out <= request_data.check_in:
+    if request_data.check_out < request_data.check_in:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Check-out date must be after check-in date"
+            detail="Check-out date must be on or after check-in date"
         )
     
     # Check villa availability for the requested dates
