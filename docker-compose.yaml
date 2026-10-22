@@ -1,0 +1,49 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+    # Coolify's proxy (Traefik/Caddy) routes the configured domain to this port,
+    # so it is only exposed to the internal network, not published on the host.
+    expose:
+      - "8000"
+
+    environment:
+      - PROJECT_NAME=${PROJECT_NAME:-XerpeX ERP System}
+      - API_V1_STR=${API_V1_STR:-/api/v1}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-11520}
+      # Database connection settings
+      - MYSQL_SERVER=${MYSQL_SERVER:?MYSQL_SERVER is required}
+      - MYSQL_USER=${MYSQL_USER:?MYSQL_USER is required}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      - MYSQL_DB=${MYSQL_DB:?MYSQL_DB is required}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      # CORS settings
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["https://kebunsu-erp.tugugroup.co.id"]}
+      # Sentry settings
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-1.0}
+      - SENTRY_ENABLE=${SENTRY_ENABLE:-false}
+      # Email settings
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - SALES_ADMIN_EMAIL=${SALES_ADMIN_EMAIL:-}
+      - SALES_DIRECTOR_EMAIL=${SALES_DIRECTOR_EMAIL:-}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - MAIL_FROM=${MAIL_FROM:-}
+      - MAIL_PORT=${MAIL_PORT:-587}
+      - MAIL_SERVER=${MAIL_SERVER:-}
+      - MAIL_FROM_NAME=${MAIL_FROM_NAME:-XerpeX ERP System}
+      - MAIL_STARTTLS=${MAIL_STARTTLS:-true}
+      - MAIL_SSL_TLS=${MAIL_SSL_TLS:-false}
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

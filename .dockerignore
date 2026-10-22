@@ -4,7 +4,8 @@
 
 # Docker
 Dockerfile
-docker-compose.yml
+docker-compose*.yml
+docker-compose*.yaml
 .dockerignore
 
 # Python
@@ -31,8 +32,11 @@ var/
 
 # Virtual Environment
 venv/
+.venv/
 ENV/
 .env
+.env.*
+!.env.example
 
 # IDE
 .idea/
@@ -59,3 +63,10 @@ logs/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Local artifacts
+test.db
+localhost/
+tests/
+.kilo/
+.kilocode/
