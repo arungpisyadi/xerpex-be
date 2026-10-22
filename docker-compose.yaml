@@ -21,7 +21,8 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
       - MYSQL_DB=${MYSQL_DB:?MYSQL_DB is required}
       - MYSQL_PORT=${MYSQL_PORT:-3306}
-      # CORS settings
+      # CORS settings (handled by the app, since Coolify's proxy adds no CORS headers)
+      - CORS_ENABLE=${CORS_ENABLE:-true}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["https://kebunsu-erp.tugugroup.co.id"]}
       # Sentry settings
       - SENTRY_DSN=${SENTRY_DSN:-}

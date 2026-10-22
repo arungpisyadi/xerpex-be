@@ -3,10 +3,10 @@ Configuration settings for the XerpeX ERP System
 """
 import os
 import json
-from typing import Optional, List
+from typing import Annotated, Optional, List
 from pydantic import AnyUrl, Field
 from pydantic.functional_validators import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -33,22 +33,30 @@ class Settings(BaseSettings):
         return f"mysql+mysqldb://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_SERVER}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
     
     # CORS settings
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    # Enable app-level CORS when no reverse proxy (e.g. Nginx) adds CORS headers, such as on Coolify
+    CORS_ENABLE: bool = False
+    # NoDecode: let the validator below parse the raw env value instead of pydantic-settings
+    BACKEND_CORS_ORIGINS: Annotated[List[str], NoDecode] = ["*"]
     
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
         """Parse CORS origins from string or list."""
+        if isinstance(v, str):
+            # Drop surrounding quotes, e.g. BACKEND_CORS_ORIGINS="a,b" kept literally by the platform
+            v = v.strip().strip("'\"")
         if isinstance(v, str) and not v.startswith("["):
             # Use a set to remove duplicates, then convert back to list
-            return list(set(i.strip() for i in v.split(",")))
+            return list(set(i.strip().strip("'\"") for i in v.split(",") if i.strip()))
         if isinstance(v, str):
             try:
                 # Parse JSON and remove duplicates
                 origins = json.loads(v)
                 return list(set(origins)) if isinstance(origins, list) else origins
             except json.JSONDecodeError:
-                return ["*"]
+                # Tolerate malformed JSON (e.g. trailing comma, single quotes) by splitting manually
+                items = (i.strip().strip("'\"") for i in v.strip().strip("[]").split(","))
+                return list(set(i for i in items if i))
         # If it's already a list, remove duplicates
         return list(set(v)) if isinstance(v, list) else v
     

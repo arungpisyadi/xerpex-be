@@ -108,9 +108,9 @@ scheduler.add_job(
     replace_existing=True
 )
 
-# Set up CORS middleware for development environments
-# In production, CORS is handled by Nginx
-if settings.SENTRY_ENVIRONMENT in ["localhost", "development"]:
+# Set up CORS middleware for development environments, or when explicitly enabled
+# (e.g. on Coolify). On Nginx deployments, CORS is handled by Nginx.
+if settings.CORS_ENABLE or settings.SENTRY_ENVIRONMENT in ["localhost", "development"]:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.BACKEND_CORS_ORIGINS,
